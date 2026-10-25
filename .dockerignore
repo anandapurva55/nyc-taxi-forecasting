@@ -1,0 +1,35 @@
+# Keep the build context lean. NOTE: the self-contained image intentionally
+# bakes in mlruns/, the portable mlflow.container.db, and the demand-history
+# parquet (see docker/Dockerfile), so those are NOT ignored here.
+.venv/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Raw / intermediate data not needed for serving.
+data/raw/
+data/features/
+# From processed/, keep only the demand-history parquet used at inference.
+data/processed/*
+!data/processed/demand_hourly.parquet
+
+# Reporting / dev-only assets.
+artifacts/
+notebooks/
+presentations/
+tests/
+plan.md
+README.md
+
+# Local dev SQLite state we do NOT want in the image.
+predictions.db
+mlflow.db
+# The container-ready MLflow DB IS included (built before docker build).
+!mlflow.container.db
+
+.secrets/
+transcripts/

@@ -1,0 +1,10 @@
+# Build context for docker/Dockerfile.monitoring: code, config and the
+# training splits used as the drift reference. Nothing else.
+**
+!requirements.txt
+!src/**
+!config/**
+!scripts/**
+!data/features/demand_train.parquet
+!data/features/fare_train.parquet
+**/__pycache__

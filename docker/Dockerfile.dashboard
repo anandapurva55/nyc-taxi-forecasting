@@ -1,0 +1,46 @@
+# Image for the Streamlit showcase dashboard.
+# Build context is the repository root: docker build -f docker/Dockerfile.dashboard .
+#
+# The dashboard is stateless: it talks to the prediction API over HTTP (set
+# API_BASE_URL) and bundles only the static showcase artifacts (model cards,
+# fairness reports, drift reports, SHAP plots, zone lookup). No models or MLflow
+# are required.
+
+# --- Builder: install dashboard dependencies into a venv ----------------------
+FROM python:3.11-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+COPY requirements-dashboard.txt ./
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip \
+    && /opt/venv/bin/pip install -r requirements-dashboard.txt
+
+# --- Runtime: copy venv + app + static artifacts ------------------------------
+FROM python:3.11-slim AS runtime
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONFAULTHANDLER=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app \
+    API_BASE_URL=http://localhost:8000
+
+WORKDIR /app
+COPY --from=builder /opt/venv /opt/venv
+COPY dashboard ./dashboard
+
+# Static showcase artifacts rendered by the Responsible AI and forecast views.
+COPY docs/model_cards ./docs/model_cards
+COPY artifacts/responsible ./artifacts/responsible
+COPY artifacts/drift ./artifacts/drift
+COPY data/raw/taxi_zone_lookup.csv ./data/raw/taxi_zone_lookup.csv
+
+EXPOSE 8501
+
+# Streamlit serves on 8501; the ALB health check hits Streamlit's health path.
+CMD ["streamlit", "run", "dashboard/app.py", \
+     "--server.port=8501", "--server.address=0.0.0.0", \
+     "--server.headless=true", "--browser.gatherUsageStats=false"]

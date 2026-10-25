@@ -1,0 +1,44 @@
+# Local development stack for the NYC Taxi prediction platform.
+#
+# Prerequisite: train the models locally first so the MLflow registry, artifacts
+# and demand history exist:
+#     python -m scripts.run_pipeline --skip-download
+#     python -m scripts.train_models
+#     python scripts/make_mlflow_portable.py --src mlflow.db --dest mlflow.container.db --new-base file:///app/mlruns
+#
+# Then:  docker compose -f docker/docker-compose.yml up --build
+#   - API      -> http://localhost:8000  (Swagger at /docs)
+#   - MLflow UI -> http://localhost:5000
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # Resolve the file-based registry/artifacts against the mounted project.
+      MLFLOW_TRACKING_URI: "sqlite:////app/mlflow.db"
+    volumes:
+      - ../mlflow.container.db:/app/mlflow.db
+      - ../mlruns:/app/mlruns
+      - ../data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  mlflow-ui:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: >-
+      mlflow ui --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////app/mlflow.db
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../mlflow.container.db:/app/mlflow.db
+      - ../mlruns:/app/mlruns

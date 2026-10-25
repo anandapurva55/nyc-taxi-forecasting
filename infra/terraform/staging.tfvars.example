@@ -1,0 +1,15 @@
+# Optional deployment template. Applying Terraform creates billable base resources
+# even when every optional feature below is disabled. Use your own AWS account,
+# credentials, resource prefix, state and reviewed image before any plan/apply.
+aws_region   = "us-east-1"
+environment  = "staging"
+project_name = "taxi-forecasting-personal"
+
+enable_monitoring = false
+enable_dashboard  = false
+enable_datalake   = false
+enable_athena     = false
+enable_cicd       = false
+
+github_repo_url = ""
+alert_email     = ""

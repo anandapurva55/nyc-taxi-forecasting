@@ -1,0 +1,67 @@
+# Central configuration for the taxi ML platform pipeline.
+
+data:
+  # NYC TLC Yellow Taxi trip data sample to ingest.
+  tlc_year: 2024
+  tlc_month: 2
+  base_url: "https://d37ci6vzurychx.cloudfront.net/trip-data"
+  zone_lookup_url: "https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv"
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  features_dir: "data/features"
+
+cleaning:
+  # Plausible bounds used to filter out corrupt / outlier trip records.
+  min_fare: 0.0
+  max_fare: 500.0
+  min_trip_distance: 0.0
+  max_trip_distance: 100.0
+  min_passenger_count: 1
+  max_passenger_count: 8
+  min_trip_duration_min: 1.0
+  max_trip_duration_min: 240.0
+
+split:
+  # Chronological train/validation/test fractions.
+  train_frac: 0.8
+  val_frac: 0.1
+  test_frac: 0.1
+
+features:
+  demand_lags: [1, 2, 3, 24, 168]
+  demand_rolling_windows: [3, 24, 168]
+
+models:
+  # model development settings.
+  random_state: 42
+  # Number of Optuna trials per estimator (override via CLI for fast runs / CI).
+  n_trials: 25
+  # Metric used to select the best model on the validation split.
+  selection_metric: "rmse"
+  estimators: ["xgboost", "lightgbm"]
+  # MLflow Model Registry names for the best model per problem.
+  registry_demand: "taxi-demand-forecaster"
+  registry_fare: "taxi-fare-predictor"
+  # Directory for non-MLflow artifacts (SHAP plots, model cards).
+  artifacts_dir: "artifacts"
+
+serving:
+  # serving / batch configuration.
+  # Dense hourly demand history used to build lag/rolling features at inference.
+  demand_history_path: "data/processed/demand_hourly.parquet"
+  # SQLite database for batch demand forecasts.
+  batch_db_path: "predictions.db"
+  # Registry stage/version reference to load (e.g. a version number or "latest").
+  model_stage: "latest"
+  # Hours ahead for the batch demand forecast.
+  batch_horizon_hours: 24
+
+mlflow:
+  # SQLite backend enables the MLflow Model Registry (file store does not).
+  tracking_uri: "sqlite:///mlflow.db"
+  experiment_demand: "taxi-demand-forecasting"
+  experiment_fare: "taxi-fare-prediction"
+  # Optional S3 (or other) artifact root so runs/models are cloud-backed, e.g.
+  # "s3://<bucket>/mlflow". Empty = MLflow's local default (./mlruns). Overridable
+  # via MLFLOW_ARTIFACT_ROOT. Requires boto3 for S3.
+  artifact_root: ""

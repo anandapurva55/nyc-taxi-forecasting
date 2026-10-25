@@ -1,0 +1,46 @@
+# Drift-detection image for the SageMaker Processing job.
+#
+# Runs scripts/monitoring/run_drift_job.py: it compares captured prediction
+# records in S3 against the training split baked into this image, writes
+# drift_metrics.json and publishes drift metrics to CloudWatch.
+#
+# Build for SageMaker (x86_64) from the repository root:
+#   docker buildx build --platform linux/amd64 -f docker/Dockerfile.monitoring -t <ecr-repo>:monitoring --push .
+
+FROM python:3.11-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements.txt ./
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip \
+    && /opt/venv/bin/pip install -r requirements.txt "boto3>=1.34"
+
+FROM python:3.11-slim AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+COPY --from=builder /opt/venv /opt/venv
+COPY src ./src
+COPY config ./config
+COPY scripts ./scripts
+
+# Reference distributions for drift comparison.
+COPY data/features/demand_train.parquet ./data/features/demand_train.parquet
+COPY data/features/fare_train.parquet ./data/features/fare_train.parquet
+
+ENTRYPOINT ["python3", "scripts/monitoring/run_drift_job.py"]

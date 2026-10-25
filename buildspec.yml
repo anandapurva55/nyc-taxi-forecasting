@@ -1,0 +1,87 @@
+# AWS CodeBuild CI/CD for the taxi-forecasting API.
+#
+# Runs on every push/PR (webhook). It always lints + tests. On a push to the
+# default branch it additionally builds the SELF-CONTAINED image and deploys:
+#   test -> fetch baked artifacts from S3 -> build image -> push to ECR -> roll ECS.
+#
+# The image bakes in mlruns/, mlflow.db and the demand-history parquet, which are
+# gitignored (absent from the checkout). CodeBuild pulls them from
+# s3://$ARTIFACTS_BUCKET/ (upload once with scripts/aws/upload_artifacts.ps1).
+#
+# Required project env vars (set by Terraform in infra/terraform/cicd.tf):
+#   AWS_REGION, ECR_REPOSITORY_URL, ECS_CLUSTER, ECS_SERVICE, ARTIFACTS_BUCKET,
+#   IMAGE_TAG, DEPLOY_BRANCH.
+
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - python -m pip install --upgrade pip
+      - pip install -r requirements.txt
+
+  pre_build:
+    commands:
+      - echo "Ruff lint"
+      - ruff check .
+      - echo "Pytest with coverage"
+      - pytest --cov=src --cov-report=term-missing --cov-report=xml
+      # Decide whether this run should also build + deploy (push to DEPLOY_BRANCH).
+      - |
+        DEPLOY="false"
+        if echo "$CODEBUILD_WEBHOOK_HEAD_REF" | grep -q "refs/heads/${DEPLOY_BRANCH}"; then
+          DEPLOY="true"
+        fi
+        # Manual CodeBuild starts (no webhook ref) also deploy by default.
+        if [ -z "$CODEBUILD_WEBHOOK_EVENT" ]; then DEPLOY="true"; fi
+        echo "DEPLOY=$DEPLOY" > deploy.env
+        echo "Deploy this run: $DEPLOY"
+
+  build:
+    commands:
+      - . ./deploy.env
+      - |
+        if [ "$DEPLOY" != "true" ]; then
+          echo "Not the deploy branch - skipping image build/deploy."
+          exit 0
+        fi
+      - echo "Fetching baked artifacts from s3://$ARTIFACTS_BUCKET"
+      - aws s3 sync "s3://$ARTIFACTS_BUCKET/mlruns" ./mlruns --only-show-errors
+      - aws s3 cp "s3://$ARTIFACTS_BUCKET/mlflow.db" ./mlflow.db --only-show-errors
+      - mkdir -p data/processed
+      - aws s3 cp "s3://$ARTIFACTS_BUCKET/demand_hourly.parquet" ./data/processed/demand_hourly.parquet --only-show-errors
+      - echo "Generating container-portable MLflow DB"
+      - python scripts/make_mlflow_portable.py --src mlflow.db --dest mlflow.container.db --new-base "file:///app/mlruns"
+      - echo "Logging in to ECR"
+      - REGISTRY="${ECR_REPOSITORY_URL%%/*}"
+      - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+      - IMAGE="${ECR_REPOSITORY_URL}:${IMAGE_TAG}"
+      - echo "Building and pushing $IMAGE"
+      - docker build -f docker/Dockerfile -t "$IMAGE" .
+      - docker push "$IMAGE"
+      - |
+        if [ "$IMAGE_TAG" != "latest" ]; then
+          LATEST="${ECR_REPOSITORY_URL}:latest"
+          echo "Publishing the same image as $LATEST for the current ECS task definition"
+          docker tag "$IMAGE" "$LATEST"
+          docker push "$LATEST"
+        fi
+
+  post_build:
+    commands:
+      - . ./deploy.env
+      - |
+        if [ "$DEPLOY" != "true" ]; then
+          echo "CI (test-only) complete."
+          exit 0
+        fi
+      - echo "Rolling ECS service $ECS_SERVICE"
+      - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --force-new-deployment --region "$AWS_REGION"
+      - echo "Deploy complete."
+
+artifacts:
+  files:
+    - coverage.xml
+  name: coverage

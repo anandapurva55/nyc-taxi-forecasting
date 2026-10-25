@@ -1,0 +1,46 @@
+# AWS CodeBuild spec for the Streamlit dashboard image.
+#
+# Used via `aws codebuild start-build --buildspec-override buildspec-dashboard.yml`
+# on the existing taxi-forecasting CI project. The dashboard image is
+# self-contained (static model cards / fairness and drift reports / zone lookup baked in),
+# with a container smoke test before image publication. No model bundles or
+# MLflow are needed here.
+#
+# Required env vars (pass with --environment-variables-override, or reuse the
+# project's AWS_REGION / ECS_CLUSTER / ARTIFACTS_BUCKET):
+#   AWS_REGION, ECS_CLUSTER, ARTIFACTS_BUCKET, DASH_ECR_URL, DASH_ECS_SERVICE,
+#   DASH_IMAGE_TAG
+#
+# The gitignored static artifacts (artifacts/responsible/*, artifacts/drift/*,
+# taxi_zone_lookup.csv)
+# are pulled from s3://$ARTIFACTS_BUCKET/dashboard/ (seed with
+# scripts/aws/upload_dashboard_artifacts.ps1).
+
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to ECR"
+      - REGISTRY="${DASH_ECR_URL%%/*}"
+      - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+
+  build:
+    commands:
+      - IMAGE="${DASH_ECR_URL}:${DASH_IMAGE_TAG}"
+      - echo "Fetching dashboard static artifacts from s3://$ARTIFACTS_BUCKET/dashboard"
+      - mkdir -p artifacts/responsible artifacts/drift data/raw
+      - aws s3 sync "s3://$ARTIFACTS_BUCKET/dashboard/responsible" ./artifacts/responsible --only-show-errors
+      - aws s3 sync "s3://$ARTIFACTS_BUCKET/dashboard/drift" ./artifacts/drift --only-show-errors
+      - aws s3 cp "s3://$ARTIFACTS_BUCKET/dashboard/taxi_zone_lookup.csv" ./data/raw/taxi_zone_lookup.csv --only-show-errors
+      - echo "Building and pushing dashboard image $IMAGE"
+      - docker build -f docker/Dockerfile.dashboard -t "$IMAGE" .
+      - docker run --rm -i --entrypoint python "$IMAGE" - < scripts/aws/verify_dashboard.py
+      - docker push "$IMAGE"
+
+  post_build:
+    commands:
+      - test "$CODEBUILD_BUILD_SUCCEEDING" = "1"
+      - echo "Rolling dashboard ECS service $DASH_ECS_SERVICE"
+      - aws ecs update-service --cluster "$ECS_CLUSTER" --service "$DASH_ECS_SERVICE" --force-new-deployment --region "$AWS_REGION"
+      - echo "Dashboard deploy complete."

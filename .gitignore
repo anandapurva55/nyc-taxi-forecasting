@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+
+# Data artifacts (kept out of VCS)
+data/raw/*
+data/processed/*
+data/features/*
+!data/**/.gitkeep
+
+# MLflow
+mlruns/
+mlflow.db
+*.db
+
+# Models / outputs
+artifacts/
+*.pkl
+*.joblib
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Office temp lock files
+~$*
+
+# Notebook build artifacts (the executed .ipynb is kept; HTML export is not)
+notebooks/*.html
+
+# Terraform (state and local provider cache are never committed)
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# Coverage report (generated in CI)
+coverage.xml
+
+# Private reference material, never publish
+transcripts/
+
+# Local secrets, never publish
+.secrets/
+
+# Local run logs
+logs/

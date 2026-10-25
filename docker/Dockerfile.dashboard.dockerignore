@@ -1,0 +1,41 @@
+# Dedicated ignore-file for the dashboard image build.
+#
+# BuildKit uses "<dockerfile>.dockerignore" (this file) in preference to the
+# root .dockerignore when building with `-f docker/Dockerfile.dashboard`. The
+# root .dockerignore is tuned for the API image and excludes data/raw/ and
+# artifacts/, which the dashboard image needs - hence this override.
+
+.venv/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# The dashboard is static: no models, MLflow, or processed data required.
+mlruns/
+mlflow.db
+mlflow.container.db
+predictions.db
+data/processed/
+data/features/
+data/interim/
+
+# Keep only the zone lookup from data/raw.
+data/raw/*
+!data/raw/taxi_zone_lookup.csv
+
+# Keep only the Responsible-AI and drift reports from artifacts.
+artifacts/*
+!artifacts/responsible
+!artifacts/drift
+
+notebooks/
+presentations/
+tests/
+plan.md
+
+.secrets/
+transcripts/

@@ -1,0 +1,14 @@
+# monitoring & retraining dependencies.
+#
+# These are NOT part of the lean serving image (requirements.txt). They are only
+# needed for the AWS drift-detection Processing job, the SageMaker retraining
+# pipeline, and the build+deploy step. Install into the job/training image only:
+#
+#     pip install -r requirements.txt -r requirements-monitoring.txt
+#
+# Drift *core* (src/monitoring) needs only numpy/scipy/pandas (already in
+# requirements.txt) and stays unit-testable without anything below.
+
+boto3>=1.34
+sagemaker==2.249.0
+evidently>=0.4,<0.5
