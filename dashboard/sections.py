@@ -33,16 +33,18 @@ def overview() -> None:
     st.title("🚕 NYC Taxi Forecasting - MLOps Showcase")
     st.markdown(
         """
-This platform serves **two models** trained on NYC TLC trip data:
+This platform serves **two models** trained on NYC TLC Yellow Taxi trips from
+February 2024:
 
-- **Demand forecaster** - hourly pickup counts per taxi zone (recursive
-  multi-hour forecasting).
-- **Fare predictor** - trip fare from distance, zones, time and duration.
+- **Demand forecaster** (XGBoost): hourly pickup counts per taxi zone, with
+  recursive multi-hour forecasting.
+- **Fare predictor** (LightGBM): trip fare from distance, zones, time and duration.
 
-It progressed through seven phases: data foundation → model development →
-FastAPI serving → CI/CD → monitoring & drift detection → responsible AI →
-this dashboard. The configured FastAPI route is shown in the sidebar; it may
-point to local serving or AWS ECS Fargate behind an ALB.
+The system runs as eight connected stages: data pipeline → model training →
+FastAPI serving → CI/CD and infrastructure → monitoring and drift detection →
+responsible AI → this dashboard → one-command golden path. Every number on
+these pages comes from the live API shown in the sidebar or from the generated
+analysis reports.
         """
     )
 
@@ -170,7 +172,7 @@ def fare_prediction() -> None:
         passenger_count = c2.number_input("Passengers", 1, 8, 1)
         pu = c1.number_input("Pickup zone ID", 1, 265, 132)
         do = c2.number_input("Drop-off zone ID", 1, 265, 230)
-        pickup_date = c1.date_input("Pickup date", datetime(2024, 1, 15))
+        pickup_date = c1.date_input("Pickup date", datetime(2024, 2, 27))
         pickup_time = c2.time_input("Pickup time", time(18, 30))
         submitted = st.form_submit_button("Predict fare")
 
@@ -217,7 +219,7 @@ def explainability() -> None:
     labels = data.zone_labels(zones)
     zone = st.selectbox("Zone", zones, format_func=lambda z: labels.get(z, str(z)))
     c1, c2 = st.columns(2)
-    target_date = c1.date_input("Target date", datetime(2024, 1, 31))
+    target_date = c1.date_input("Target date", datetime(2024, 2, 29))
     target_time = c2.time_input("Target hour", time(20, 0))
     target = datetime.combine(target_date, target_time).isoformat()
 

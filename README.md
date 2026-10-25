@@ -7,8 +7,6 @@ A production-style machine learning system that answers two questions for New Yo
 
 The project covers the full lifecycle. It downloads public trip data, cleans it, builds features, trains and tunes two model families, tracks every run in MLflow, serves predictions through a FastAPI service, packages that service with Docker, deploys it to AWS ECS Fargate with Terraform, releases every change through AWS CodeBuild, captures live predictions for drift monitoring with SageMaker, explains and audits the models with SHAP and subgroup error analysis, and presents everything in a Streamlit dashboard.
 
-**Author:** Apurva Anand
-
 ---
 
 ## Table of contents
@@ -236,10 +234,10 @@ The API task runs with **1 vCPU and 2 GB of memory** in the default VPC behind a
 |---|---|
 | install | Install Python dependencies |
 | pre_build | `ruff check .` and `pytest` with coverage. A failure stops the build. |
-| build | Download model artifacts from S3, create the portable registry, `docker build`, push to ECR tagged with the commit ID |
+| build | Download model artifacts from S3, create the portable registry, `docker build`, push the image to ECR as `latest` |
 | post_build | Request an ECS rolling update to the new image |
 
-Pushes to `main` build and deploy. Pull requests run the quality gate and never deploy. CodeBuild reports the result back to GitHub, so every commit shows a pass or fail status.
+Pushes to `main` build and deploy. Pull requests run the quality gate and never deploy. CodeBuild records the Git commit it built as the build's source version and reports the result back to GitHub, so every commit shows a pass or fail status and every image traces back to one commit.
 
 ---
 

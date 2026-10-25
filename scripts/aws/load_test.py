@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
@@ -38,10 +39,20 @@ def _percentile(values: list[float], percentile: float) -> float:
     return ordered[index]
 
 
+_local = threading.local()
+
+
+def _session() -> requests.Session:
+    """One keep-alive session per worker thread, like a real API client."""
+    if not hasattr(_local, "session"):
+        _local.session = requests.Session()
+    return _local.session
+
+
 def _request(probe: Probe, timeout: float) -> Sample:
     started = time.perf_counter()
     try:
-        response = requests.request(
+        response = _session().request(
             probe.method, probe.url, json=probe.payload, timeout=timeout
         )
         elapsed_ms = (time.perf_counter() - started) * 1000

@@ -63,3 +63,6 @@ transcripts/
 
 # Local run logs
 logs/
+
+# Terraform plan files store variable values, including secrets, in plain text
+*.tfplan

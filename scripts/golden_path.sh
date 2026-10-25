@@ -32,6 +32,7 @@ API_PID=""
 cleanup() {
     if [[ -n "$API_PID" ]] && kill -0 "$API_PID" 2>/dev/null; then
         kill "$API_PID"
+        wait "$API_PID" 2>/dev/null || true
     fi
 }
 trap cleanup EXIT
@@ -80,6 +81,7 @@ serve_and_smoke_test() {
     "$PY" scripts/aws/verify_staging.py --api-url "http://127.0.0.1:$API_PORT" \
         --timeout 60 --output "$LOG_DIR/api_smoke_test.json"
     kill "$API_PID"
+    wait "$API_PID" 2>/dev/null || true
     API_PID=""
 }
 

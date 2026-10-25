@@ -12,15 +12,21 @@ from dashboard.config import api_base_url
 _TIMEOUT = 60
 
 
+@st.cache_resource
+def _session() -> requests.Session:
+    """Shared keep-alive session so repeated calls skip the TCP handshake."""
+    return requests.Session()
+
+
 def _post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    resp = requests.post(f"{api_base_url()}{path}", json=payload, timeout=_TIMEOUT)
+    resp = _session().post(f"{api_base_url()}{path}", json=payload, timeout=_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 
 
 @st.cache_data(ttl=30, show_spinner=False)
 def health() -> dict[str, Any]:
-    resp = requests.get(f"{api_base_url()}/health", timeout=_TIMEOUT)
+    resp = _session().get(f"{api_base_url()}/health", timeout=_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
 
