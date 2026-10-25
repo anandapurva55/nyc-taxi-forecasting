@@ -28,7 +28,7 @@ from diagrams.generic.storage import Storage
 from diagrams.onprem.client import Users
 from diagrams.onprem.mlops import Mlflow
 from diagrams.onprem.vcs import Github
-from diagrams.programming.flowchart import Document, Database
+from diagrams.programming.flowchart import Database, Document
 from diagrams.programming.framework import Fastapi
 from diagrams.programming.language import Python
 
