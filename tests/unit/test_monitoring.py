@@ -8,7 +8,11 @@ import json
 import numpy as np
 import pandas as pd
 
-from scripts.monitoring.run_drift_job import _cloudwatch_metric_data
+from scripts.monitoring.run_drift_job import (
+    _align_capture_columns,
+    _cloudwatch_metric_data,
+    build_parser,
+)
 from src.monitoring import (
     compute_drift,
     performance_degradation,
@@ -74,6 +78,27 @@ def test_cloudwatch_metric_data_includes_aggregate_and_problem_series():
             "Dimensions": [{"Name": "Problem", "Value": "fare"}],
         },
     ]
+
+
+def test_align_capture_columns_matches_training_feature_names():
+    fare = pd.DataFrame({"pu_location_id": [132], "do_location_id": [230], "trip_distance": [3.4]})
+    demand = pd.DataFrame({"zone": [132], "hour_of_day": [18], "day_of_week": [1]})
+
+    assert list(_align_capture_columns(fare, "fare").columns) == [
+        "PULocationID",
+        "DOLocationID",
+        "trip_distance",
+    ]
+    assert list(_align_capture_columns(demand, "demand").columns) == [
+        "PULocationID",
+        "hour",
+        "day_of_week",
+    ]
+
+
+def test_fail_on_drift_defaults_on_and_can_be_disabled():
+    assert build_parser().parse_args(["--problem", "fare"]).fail_on_drift is True
+    assert build_parser().parse_args(["--problem", "fare", "--no-fail-on-drift"]).fail_on_drift is False
 
 
 def test_evaluate_performance_and_degradation():

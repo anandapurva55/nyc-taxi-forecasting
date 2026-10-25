@@ -430,7 +430,13 @@ resource "aws_scheduler_schedule" "drift" {
           "--current-s3", "s3://${aws_s3_bucket.monitoring[0].bucket}/captured/",
           "--output-dir", "/opt/ml/processing/output",
           "--namespace", "TaxiForecasting/Drift",
+          # Drift is reported through the CloudWatch metric and alarm, not a failed job.
+          "--no-fail-on-drift",
         ]
+      }
+      # Processing containers get no default region; CloudWatch publishing needs one.
+      Environment = {
+        AWS_DEFAULT_REGION = var.aws_region
       }
       ProcessingResources = {
         ClusterConfig = {

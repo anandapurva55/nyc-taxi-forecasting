@@ -63,7 +63,19 @@ def _load_current(
     frames = [f for f in frames if not f.empty]
     if not frames:
         return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
+    return _align_capture_columns(pd.concat(frames, ignore_index=True), problem)
+
+
+# Captured request fields use API names; the reference uses training feature names.
+CAPTURE_TO_FEATURE = {
+    "fare": {"pu_location_id": "PULocationID", "do_location_id": "DOLocationID"},
+    "demand": {"zone": "PULocationID", "hour_of_day": "hour"},
+}
+
+
+def _align_capture_columns(current: pd.DataFrame, problem: str) -> pd.DataFrame:
+    """Rename captured API fields so they line up with the reference features."""
+    return current.rename(columns=CAPTURE_TO_FEATURE.get(problem, {}))
 
 
 def _cloudwatch_metric_data(metrics: list[dict], problem: str) -> list[dict]:
@@ -147,9 +159,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-cloudwatch", action="store_true", help="Skip CloudWatch publish.")
     p.add_argument(
         "--fail-on-drift",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Exit non-zero when drift is detected (default).",
+        help="Exit non-zero when drift is detected (default). Use --no-fail-on-drift "
+        "to finish successfully and signal drift only through CloudWatch.",
     )
     return p
 

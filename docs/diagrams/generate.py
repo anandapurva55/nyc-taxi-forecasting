@@ -54,19 +54,19 @@ def ml_lifecycle() -> None:
     ):
         source = Storage("NYC TLC\nYellow Taxi\nFeb 2024")
 
-        with Cluster("Phase 1: Data pipeline"):
+        with Cluster("Data pipeline"):
             pipeline = Python("ingest, validate,\naggregate, features")
-            splits = Database("chronological\ntrain / val / test\nParquet")
+            splits = Database("chronological splits\ntrain, val, test\nParquet")
 
-        with Cluster("Phase 2: Training"):
+        with Cluster("Training and registry"):
             tuning = Python("Optuna tuning\nXGBoost vs LightGBM")
             registry = Mlflow("MLflow tracking\n+ model registry")
 
-        with Cluster("Phase 3: Serving"):
+        with Cluster("Serving"):
             api = Fastapi("FastAPI\nreal-time API")
             batch = Python("batch forecast\n(predictions.db)")
 
-        with Cluster("Phases 5 to 7: Operate"):
+        with Cluster("Monitoring, responsible AI, dashboard"):
             drift = Python("drift detection\nPSI + KS")
             rai = Python("SHAP + subgroup\nerror analysis")
             dashboard = Python("Streamlit\ndashboard")
@@ -98,17 +98,17 @@ def data_pipeline() -> None:
         with Cluster("Demand branch (one row per zone and hour)"):
             hourly = Database("demand_hourly.parquet")
             demand_feats = Database("demand_features.parquet\nlags, rolling means,\ncalendar")
-            demand_splits = Database("demand_train / val / test")
+            demand_splits = Database("demand train, val, test")
 
         with Cluster("Fare branch (one row per trip)"):
             fare_feats = Database("fare_features.parquet\ndistance, zones,\ntime of day")
-            fare_splits = Database("fare_train / val / test")
+            fare_splits = Database("fare train, val, test")
 
         raw >> Edge(label="validate + clean") >> clean
         zones >> Edge(style="dashed") >> clean
         clean >> Edge(style="dashed") >> summary
-        clean >> Edge(label="aggregate") >> hourly >> demand_feats >> Edge(label="80 / 10 / 10 by time") >> demand_splits
-        clean >> fare_feats >> Edge(label="80 / 10 / 10 by time") >> fare_splits
+        clean >> Edge(label="aggregate") >> hourly >> demand_feats >> Edge(label="80%, 10%, 10% by time") >> demand_splits
+        clean >> fare_feats >> Edge(label="80%, 10%, 10% by time") >> fare_splits
 
 
 def aws_architecture() -> None:

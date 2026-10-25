@@ -66,3 +66,6 @@ logs/
 
 # Terraform plan files store variable values, including secrets, in plain text
 *.tfplan
+
+# Raw AWS console screenshots (contain account details); redacted copies go to docs/images/console/
+console-shots/
