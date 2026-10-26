@@ -58,9 +58,9 @@ Models are selected on the **validation** set and reported on the **test** set, 
 |---|---|
 | Data | 3,007,526 raw trips cleaned to 2,722,931 (90.5% kept) |
 | Quality gate | Ruff clean, 122 unit and integration tests passing |
-| Infrastructure | 59 AWS resources from Terraform; API and dashboard running 1 of 1 tasks |
+| Infrastructure | 59 AWS resources from Terraform; API and dashboard ran 1 of 1 tasks |
 | Release | GitHub push triggers CodeBuild: lint, tests, Docker build, ECR push, ECS rollout |
-| Live checks | 10 of 10 smoke checks and 400 of 400 load-test requests passed on AWS |
+| Checks on AWS | 10 of 10 smoke checks and 400 of 400 load-test requests passed |
 | Latency | 5.8 ms median server time; p95 402 ms (fare) and 291 ms (demand) end to end |
 | Drift | Real traffic: no drift. Shifted traffic: `trip_distance` flagged (PSI 1.90), alarm fired, email received |
 | Responsible AI | Subgroup audit found the largest gaps for airport trips and busy Manhattan zones, with a mitigation plan |
@@ -282,8 +282,10 @@ docker compose -f docker/docker-compose.yml up --build
 
 **Results**
 
+Health check recorded from the AWS deployment:
+
 ```bash
-$ curl http://nyc-taxi-prod-alb-447282930.us-east-1.elb.amazonaws.com/health
+$ curl "$API_URL/health"
 {"status":"ok","demand_model_loaded":true,"fare_model_loaded":true,"history_hours":696,"zones":252}
 ```
 
@@ -291,7 +293,7 @@ The batch run wrote **756 forecasts (252 zones x 3 hours)** to `predictions.db`.
 
 **Latency.** The load balancer measures a median server response time of **5.8 ms**. End-to-end latency is affected by network distance to the `us-east-1` region: from the test machine one network round trip takes about 275 ms. Clients reuse HTTP connections, which removes a second round trip for the TCP handshake.
 
-| Endpoint (live, 100 requests, 10 concurrent) | Failed | p50 | p95 | Target |
+| Endpoint (on AWS, 100 requests, 10 concurrent) | Failed | p50 | p95 | Target |
 |---|---|---|---|---|
 | Fare prediction | 0 | 358 ms | 402 ms | 500 ms, met |
 | Demand prediction | 0 | 275 ms | 291 ms | 500 ms, met |
@@ -411,7 +413,7 @@ terraform -chdir=infra/terraform destroy -var-file=prod.tfvars -var monitoring_i
 
 After the first deployment, every push to `main` rebuilds and redeploys the API automatically.
 
-**Results.** The webhook build passed every phase, both **ECS** services run 1 of 1 tasks, and the live smoke test passed 10 of 10 checks.
+**Results.** The webhook build passed every phase, both **ECS** services ran 1 of 1 tasks, and the smoke test on AWS passed 10 of 10 checks.
 
 <details>
 <summary>CodeBuild webhook build: all phases succeeded (click here to expand)</summary>
@@ -433,9 +435,9 @@ After the first deployment, every push to `main` rebuilds and redeploys the API 
 | nyc-taxi-prod-dashboard | ACTIVE | 1 | 1 | 0 |
 
 <details>
-<summary>Live smoke test on AWS: 10 of 10 checks passed (click here to expand)</summary>
+<summary>Smoke test on AWS: 10 of 10 checks passed (click here to expand)</summary>
 
-| Live smoke check | Request | HTTP | Passed |
+| Smoke check | Request | HTTP | Passed |
 |---|---|---|---|
 | health | GET `/health` | 200 | yes |
 | fare prediction | POST `/predict/fare` | 200 | yes |
@@ -526,10 +528,10 @@ bash scripts/aws/publish_fairness_evidence.sh
 
 `month` has no effect in either model because the training data covers a single month.
 
-**A single prediction explained.** The live API explains a 17-mile trip from JFK Airport (zone 132) to Times Square (zone 230) at 18:30 on 27 February 2024. The model's base value of **$18.22** plus the contributions of every feature adds up exactly to the predicted fare of **$70.25**: distance adds $34.15, duration $12.79 and the JFK pickup zone $5.59.
+**A single prediction explained.** The deployed API explained a 17-mile trip from JFK Airport (zone 132) to Times Square (zone 230) at 18:30 on 27 February 2024. The model's base value of **$18.22** plus the contributions of every feature adds up exactly to the predicted fare of **$70.25**: distance adds $34.15, duration $12.79 and the JFK pickup zone $5.59.
 
 <details>
-<summary>Live <code>POST /explain/fare</code> response, values rounded to cents (click here to expand)</summary>
+<summary><code>POST /explain/fare</code> response recorded on AWS, values rounded to cents (click here to expand)</summary>
 
 ```json
 {
@@ -645,7 +647,7 @@ API_BASE_URL=http://127.0.0.1:8000 .venv/bin/python -m streamlit run dashboard/a
 
 On AWS the dashboard runs as its own **ECS** service behind its own load balancer and calls the API load balancer.
 
-**Results.** Screenshots from the live AWS deployment.
+**Results.** Screenshots taken from the AWS deployment.
 
 | | |
 |---|---|
@@ -720,7 +722,7 @@ Real problems found while building and deploying this system, and how each was r
 
 ## Cost
 
-While running, the stack costs about **$4.50 per day**: two load balancers, the API task (1 vCPU, 2 GB), the dashboard task (0.5 vCPU, 1 GB) and their public IP addresses. **SageMaker** is billed only for the minutes each drift job runs, and logs, S3, **Firehose** and alarms cost a few cents. The whole stack is created and removed with **Terraform**, so `terraform destroy` stops all charges.
+While running, the stack costs about **$4.50 per day**: two load balancers, the API task (1 vCPU, 2 GB), the dashboard task (0.5 vCPU, 1 GB) and their public IP addresses. **SageMaker** is billed only for the minutes each drift job runs, and logs, S3, **Firehose** and alarms cost a few cents. The whole stack is created and removed with **Terraform**, so `terraform destroy` stops all charges. That is how this deployment was shut down after verification.
 
 ---
 
