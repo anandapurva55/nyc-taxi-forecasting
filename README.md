@@ -73,23 +73,22 @@ Models are selected on the **validation** set and reported on the **test** set, 
 | Area | Tools |
 |---|---|
 | Language | Python 3.11 |
-| Data processing | pandas, PyArrow, Parquet |
+| Data processing | pandas, Parquet (PyArrow) |
 | Modelling | XGBoost, LightGBM, scikit-learn |
 | Hyperparameter tuning | Optuna |
 | Experiment tracking and model registry | MLflow |
-| Explainability and fairness | SHAP, subgroup error analysis |
-| Drift detection | Population Stability Index, Kolmogorov-Smirnov test (SciPy) |
+| Explainability and drift | SHAP, Population Stability Index, Kolmogorov-Smirnov test (SciPy) |
 | Serving | FastAPI, Pydantic, Uvicorn, Prometheus instrumentation |
 | Dashboard | Streamlit, Plotly |
-| Packaging | Docker, Docker Compose, Docker Buildx |
-| Infrastructure as code | Terraform with the AWS provider |
+| Packaging | Docker (multi-stage builds), Docker Compose |
+| Infrastructure as code | Terraform |
 | Compute and networking | Amazon ECS on Fargate, Application Load Balancer, Amazon VPC |
 | Delivery | GitHub webhooks, AWS CodeBuild, Amazon ECR |
 | Monitoring | Amazon CloudWatch Logs, metrics and alarms, Amazon Data Firehose, Amazon SNS |
 | ML operations | Amazon SageMaker Processing, Amazon EventBridge Scheduler |
 | Storage and analytics | Amazon S3 with versioning, AWS Glue Data Catalog, Amazon Athena |
-| Security | AWS IAM roles per service, security groups, ECR image scanning |
-| Quality | pytest, pytest-cov, Ruff |
+| Security | AWS IAM (one role per service), VPC security groups, Amazon ECR image scanning |
+| Quality | pytest with coverage, Ruff |
 
 ---
 
