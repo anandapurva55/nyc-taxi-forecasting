@@ -1,7 +1,7 @@
 # NYC Taxi Demand and Fare Forecasting: End-to-End MLOps on AWS
 
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
-![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate%20%7C%20SageMaker%20%7C%20CodeBuild-FF9900?logo=amazonwebservices&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate%20%C2%B7%20SageMaker%20%C2%B7%20CodeBuild-FF9900)
 ![Terraform](https://img.shields.io/badge/Terraform-1.9-7B42BC?logo=terraform&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-containers-2496ED?logo=docker&logoColor=white)
 ![MLflow](https://img.shields.io/badge/MLflow-tracking%20%26%20registry-0194E2?logo=mlflow&logoColor=white)
