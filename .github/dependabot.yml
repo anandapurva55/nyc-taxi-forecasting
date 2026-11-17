@@ -1,5 +1,13 @@
 # Weekly update pull requests for every dependency source. Each pull request
 # runs the CI quality gate, including the vulnerability audit, before merging.
+#
+# Updates that would change results or break builds are left out: the libraries
+# the registered models were trained with take patch updates only (even minor
+# scikit-learn versions can change how saved models load), the Docker images
+# stay on Python 3.11 as pyproject.toml requires, and major versions of other
+# packages, GitHub Actions and the AWS provider wait for a deliberate upgrade.
+# Minor and patch updates, where security fixes land, still come through, and
+# pip-audit blocks any known vulnerability in the lockfile.
 version: 2
 updates:
   - package-ecosystem: uv
@@ -9,15 +17,39 @@ updates:
     groups:
       python:
         patterns: ["*"]
+    ignore:
+      - dependency-name: "numpy"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "pandas"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "scikit-learn"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "xgboost"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "lightgbm"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "shap"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: /docker
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "docker/library/python"
+        versions: [">= 3.12"]
   - package-ecosystem: terraform
     directory: /infra/terraform
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: "hashicorp/aws"
+        update-types: ["version-update:semver-major"]
