@@ -66,7 +66,7 @@ Disparity ratio (worst/best WAPE): **2.15** (threshold 1.5) - ⚠️ **flagged**
 
 ## Top features (SHAP)
 
-| Feature | Mean |SHAP| |
+| Feature | Mean absolute SHAP value |
 |---------|-----------|
 | trip_distance | 10.3027 |
 | hour_cos | 0.6765 |

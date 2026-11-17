@@ -1,0 +1,216 @@
+{
+  "problem": "fare",
+  "metrics": {
+    "rmse": 3.212957030433418,
+    "mae": 0.7741415871618003,
+    "mape": 5.6568363376341,
+    "r2": 0.9623815776844856
+  },
+  "dimensions": [
+    {
+      "dimension": "borough",
+      "disparity_metric": "wape",
+      "disparity_ratio": 4.292129131190916,
+      "rmse_ratio": 4.999687567127279,
+      "flagged": true,
+      "coverage_gap": false,
+      "worst_group": "Brooklyn",
+      "best_group": "Manhattan",
+      "threshold": 1.5,
+      "min_mean_actual": 1.0,
+      "low_volume_groups": [],
+      "subgroups": [
+        {
+          "dimension": "borough",
+          "group": "Brooklyn",
+          "n": 1932,
+          "rmse": 10.333996448211366,
+          "mae": 4.671241836106996,
+          "mape": 19.70395524291693,
+          "wape": 0.16384344216711305,
+          "mean_actual": 28.510398550724634
+        },
+        {
+          "dimension": "borough",
+          "group": "Bronx",
+          "n": 466,
+          "rmse": 9.47986235679913,
+          "mae": 5.710007956266251,
+          "mape": 18.599563775889298,
+          "wape": 0.16075298037275776,
+          "mean_actual": 35.52038626609442
+        },
+        {
+          "dimension": "borough",
+          "group": "Unknown",
+          "n": 925,
+          "rmse": 10.254300724970658,
+          "mae": 2.4237308052292614,
+          "mape": 23.53909450242093,
+          "wape": 0.11636470152928291,
+          "mean_actual": 20.828745945945947
+        },
+        {
+          "dimension": "borough",
+          "group": "Queens",
+          "n": 23593,
+          "rmse": 7.6531148458476554,
+          "mae": 2.31975501161411,
+          "mape": 13.838071501088159,
+          "wape": 0.044087642744780595,
+          "mean_actual": 52.616898232526594
+        },
+        {
+          "dimension": "borough",
+          "group": "Manhattan",
+          "n": 245373,
+          "rmse": 2.066928444920624,
+          "mae": 0.57789988821226,
+          "mape": 4.65485308757747,
+          "wape": 0.03817299926427242,
+          "mean_actual": 15.138969935567486
+        }
+      ]
+    },
+    {
+      "dimension": "time_of_day",
+      "disparity_metric": "wape",
+      "disparity_ratio": 1.4619961268507848,
+      "rmse_ratio": 1.8521728607183037,
+      "flagged": false,
+      "coverage_gap": false,
+      "worst_group": "overnight",
+      "best_group": "evening",
+      "threshold": 1.5,
+      "min_mean_actual": 1.0,
+      "low_volume_groups": [],
+      "subgroups": [
+        {
+          "dimension": "time_of_day",
+          "group": "overnight",
+          "n": 7020,
+          "rmse": 5.428708991201084,
+          "mae": 1.2641344630186764,
+          "mape": 5.793692638810734,
+          "wape": 0.055110369985883104,
+          "mean_actual": 22.938232193732194
+        },
+        {
+          "dimension": "time_of_day",
+          "group": "morning",
+          "n": 51445,
+          "rmse": 3.049679261645955,
+          "mae": 0.8328417402362763,
+          "mape": 4.513827727651851,
+          "wape": 0.046203790030614825,
+          "mean_actual": 18.025398775391192
+        },
+        {
+          "dimension": "time_of_day",
+          "group": "afternoon",
+          "n": 97932,
+          "rmse": 3.396740470590876,
+          "mae": 0.8363443646194078,
+          "mape": 8.054238348195252,
+          "wape": 0.04283515502087602,
+          "mean_actual": 19.52471898868603
+        },
+        {
+          "dimension": "time_of_day",
+          "group": "evening",
+          "n": 115897,
+          "rmse": 2.93099478257971,
+          "mae": 0.6658452398412477,
+          "mape": 4.130100674082329,
+          "wape": 0.03769529137166299,
+          "mean_actual": 17.663883620801226
+        }
+      ]
+    },
+    {
+      "dimension": "day_type",
+      "disparity_metric": "wape",
+      "disparity_ratio": 1.0,
+      "rmse_ratio": 1.0,
+      "flagged": false,
+      "coverage_gap": true,
+      "worst_group": "weekday",
+      "best_group": "weekday",
+      "threshold": 1.5,
+      "min_mean_actual": 1.0,
+      "low_volume_groups": [],
+      "subgroups": [
+        {
+          "dimension": "day_type",
+          "group": "weekday",
+          "n": 272294,
+          "rmse": 3.212957030433418,
+          "mae": 0.7741415871618003,
+          "mape": 5.6568363376341,
+          "wape": 0.04176101537135679,
+          "mean_actual": 18.53742252859042
+        }
+      ]
+    },
+    {
+      "dimension": "holiday",
+      "disparity_metric": "wape",
+      "disparity_ratio": 1.0,
+      "rmse_ratio": 1.0,
+      "flagged": false,
+      "coverage_gap": true,
+      "worst_group": "non-holiday",
+      "best_group": "non-holiday",
+      "threshold": 1.5,
+      "min_mean_actual": 1.0,
+      "low_volume_groups": [],
+      "subgroups": [
+        {
+          "dimension": "holiday",
+          "group": "non-holiday",
+          "n": 272294,
+          "rmse": 3.212957030433418,
+          "mae": 0.7741415871618003,
+          "mape": 5.6568363376341,
+          "wape": 0.04176101537135679,
+          "mean_actual": 18.53742252859042
+        }
+      ]
+    },
+    {
+      "dimension": "airport",
+      "disparity_metric": "wape",
+      "disparity_ratio": 1.2089391168235133,
+      "rmse_ratio": 2.7590680988246774,
+      "flagged": false,
+      "coverage_gap": false,
+      "worst_group": "non-airport",
+      "best_group": "airport",
+      "threshold": 1.5,
+      "min_mean_actual": 1.0,
+      "low_volume_groups": [],
+      "subgroups": [
+        {
+          "dimension": "airport",
+          "group": "non-airport",
+          "n": 251402,
+          "rmse": 2.6169676152303385,
+          "mae": 0.6760628153861385,
+          "mape": 5.762788349202631,
+          "wape": 0.04345113609868482,
+          "mean_actual": 15.559151637616251
+        },
+        {
+          "dimension": "airport",
+          "group": "airport",
+          "n": 20892,
+          "rmse": 7.22039186283932,
+          "mae": 1.9543636521601206,
+          "mape": 4.38173979090408,
+          "wape": 0.03594154204626338,
+          "mean_actual": 54.37617700555237
+        }
+      ]
+    }
+  ]
+}

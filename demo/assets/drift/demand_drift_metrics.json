@@ -1,0 +1,193 @@
+{
+  "problem": "demand",
+  "n_current": 1500,
+  "n_features": 20,
+  "n_drifted": 2,
+  "share_drifted": 0.1,
+  "drifted": true,
+  "psi_threshold": 0.2,
+  "ks_alpha": 0.05,
+  "features": [
+    {
+      "feature": "hour",
+      "psi": 0.003005553401362025,
+      "statistic": 0.013434480701656315,
+      "pvalue": 0.9489766583601351,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "day_of_week",
+      "psi": 0.0014180497440540918,
+      "statistic": 0.011300170567346113,
+      "pvalue": 0.9905749869960141,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "month",
+      "psi": 0.0,
+      "statistic": 0.0,
+      "pvalue": 1.0,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "is_weekend",
+      "psi": 0.0,
+      "statistic": 0.0015113385342393482,
+      "pvalue": 1.0,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "is_holiday",
+      "psi": 0.0,
+      "statistic": 0.00015183289992448668,
+      "pvalue": 1.0,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "hour_sin",
+      "psi": 0.0036446900794790014,
+      "statistic": 0.011260912115873989,
+      "pvalue": 0.990952519810254,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "hour_cos",
+      "psi": 0.0026306002416700116,
+      "statistic": 0.009718293580889048,
+      "pvalue": 0.9988224191639926,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "dow_sin",
+      "psi": 0.001126599867197117,
+      "statistic": 0.01227050303386179,
+      "pvalue": 0.9771972340383086,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "dow_cos",
+      "psi": 0.0014781874405721874,
+      "statistic": 0.010699829432653796,
+      "pvalue": 0.995213416076908,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "lag_1",
+      "psi": 13.452868292305451,
+      "statistic": 0.9385957553896486,
+      "pvalue": 0.0,
+      "drifted": true,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "lag_2",
+      "psi": 0.0006481618472914944,
+      "statistic": 0.011013636067071175,
+      "pvalue": 0.9930801771016338,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "lag_3",
+      "psi": 0.0012925784124043244,
+      "statistic": 0.01318140722720873,
+      "pvalue": 0.9563443211406106,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "lag_24",
+      "psi": 13.611858214051068,
+      "statistic": 0.9399192834307338,
+      "pvalue": 0.0,
+      "drifted": true,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "lag_168",
+      "psi": 0.000995495551954447,
+      "statistic": 0.014704601590097788,
+      "pvalue": 0.9016129486482746,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "rolling_mean_3",
+      "psi": 0.002668172109953055,
+      "statistic": 0.020429139986391898,
+      "pvalue": 0.5605785548126481,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "rolling_std_3",
+      "psi": 0.003742030653597526,
+      "statistic": 0.027235205845892896,
+      "pvalue": 0.2186098208515722,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "rolling_mean_24",
+      "psi": 0.0031723362083602488,
+      "statistic": 0.02009991704648184,
+      "pvalue": 0.581499562267688,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "rolling_std_24",
+      "psi": 0.0043417025841938715,
+      "statistic": 0.018304914762930058,
+      "pvalue": 0.6974696900592081,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "rolling_mean_168",
+      "psi": 0.00646522231702059,
+      "statistic": 0.020315913094539062,
+      "pvalue": 0.5677488942778758,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "rolling_std_168",
+      "psi": 0.005323968795210596,
+      "statistic": 0.018278686538228506,
+      "pvalue": 0.6991579597645814,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    }
+  ],
+  "prediction_drift": null
+}

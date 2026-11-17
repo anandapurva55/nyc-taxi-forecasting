@@ -10,6 +10,7 @@ import requests
 import streamlit as st
 
 from dashboard import api_client, data
+from dashboard.config import demo_mode
 
 # Assumed average fare per pickup, used only for the illustrative revenue KPI.
 _AVG_FARE_USD = 18.0
@@ -176,12 +177,21 @@ def fare_prediction() -> None:
 
     with st.form("fare_form"):
         c1, c2 = st.columns(2)
-        trip_distance = c1.number_input("Trip distance (mi)", 0.1, 100.0, 3.4, 0.1)
+        trip_distance = c1.number_input("Trip distance (mi)", 0.1, 100.0, 17.0, 0.1)
         passenger_count = c2.number_input("Passengers", 1, 8, 1)
         pu = c1.number_input("Pickup zone ID", 1, 265, 132)
         do = c2.number_input("Drop-off zone ID", 1, 265, 230)
         pickup_date = c1.date_input("Pickup date", datetime(2024, 2, 27))
         pickup_time = c2.time_input("Pickup time", time(18, 30))
+        duration = c1.number_input(
+            "Trip duration (min), optional",
+            min_value=1.0,
+            max_value=240.0,
+            value=None,
+            step=1.0,
+            help="Leave empty to quote before the trip: the booking-time model answers. "
+            "With a duration, the fare model answers.",
+        )
         submitted = st.form_submit_button("Predict fare")
 
     if not submitted:
@@ -194,6 +204,8 @@ def fare_prediction() -> None:
         "passenger_count": int(passenger_count),
         "pickup_datetime": datetime.combine(pickup_date, pickup_time).isoformat(),
     }
+    if duration is not None:
+        payload["trip_duration_min"] = float(duration)
     try:
         pred = api_client.predict_fare(payload)
         explanation = api_client.explain_fare(payload)
@@ -205,6 +217,9 @@ def fare_prediction() -> None:
     st.caption(f"Answered by `{pred.get('model', 'unknown')}`.")
     if pred.get("duration_estimated"):
         st.caption("Trip duration was estimated from distance.")
+    if pred.get("low_confidence"):
+        for note in pred.get("notes") or ["Low confidence."]:
+            st.warning(f"Low confidence: {note}")
 
     _render_contributions(explanation, "Fare - feature contributions (SHAP)")
 
@@ -225,12 +240,22 @@ def explainability() -> None:
         st.warning("No zones with demand history are available.")
         return
 
+    if demo_mode():
+        # The demo answers only recorded zones and hours.
+        from dashboard import demo_backend
+
+        recorded = demo_backend.demand_samples()
+        zones = list(dict.fromkeys(s["zone"] for s in recorded))  # recorded order: JFK first
     labels = data.zone_labels(zones)
     zone = st.selectbox("Zone", zones, format_func=lambda z: labels.get(z, str(z)))
-    c1, c2 = st.columns(2)
-    target_date = c1.date_input("Target date", datetime(2024, 2, 29))
-    target_time = c2.time_input("Target hour", time(20, 0))
-    target = datetime.combine(target_date, target_time).isoformat()
+    if demo_mode():
+        hours = [s["target_hour"] for s in recorded if s["zone"] == zone]
+        target = st.selectbox("Target hour", hours)
+    else:
+        c1, c2 = st.columns(2)
+        target_date = c1.date_input("Target date", datetime(2024, 2, 29))
+        target_time = c2.time_input("Target hour", time(20, 0))
+        target = datetime.combine(target_date, target_time).isoformat()
 
     if not st.button("Explain demand prediction"):
         return
@@ -312,7 +337,8 @@ def responsible_ai() -> None:
     shap_png = data.shap_summary_path(problem)
     if shap_png:
         st.subheader("Global SHAP summary")
-        st.image(str(shap_png), width="stretch")
+        # A fixed width keeps the plot readable instead of filling a wide screen.
+        st.image(str(shap_png), width=560)
 
     card = data.model_card(problem)
     if card:

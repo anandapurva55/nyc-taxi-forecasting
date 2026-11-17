@@ -66,7 +66,7 @@ Disparity ratio (worst/best WAPE): **1.21** (threshold 1.5) - ok. RMSE ratio for
 
 ## Top features (SHAP)
 
-| Feature | Mean |SHAP| |
+| Feature | Mean absolute SHAP value |
 |---------|-----------|
 | trip_distance | 7.3007 |
 | trip_duration_min | 4.1644 |

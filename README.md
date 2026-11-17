@@ -1,6 +1,7 @@
 # NYC Taxi Demand and Fare Forecasting on AWS: End-to-End MLOps with XGBoost, LightGBM, MLflow, FastAPI, Streamlit, Amazon SageMaker, ECS Fargate, CloudFront and Terraform
 
 [![CI](https://github.com/anandapurva55/nyc-taxi-forecasting/actions/workflows/ci.yml/badge.svg)](https://github.com/anandapurva55/nyc-taxi-forecasting/actions/workflows/ci.yml)
+[![Interactive demo](docs/images/badges/interactive-demo.svg)](https://anandapurva55.github.io/nyc-taxi-forecasting/)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![uv](docs/images/badges/uv.svg)
 ![scikit-learn](docs/images/badges/scikit-learn.svg)
@@ -27,29 +28,45 @@ An end-to-end **MLOps** system on AWS, written in **Python**, that forecasts hou
 
 ---
 
+## Try it
+
+The [interactive demo](https://anandapurva55.github.io/nyc-taxi-forecasting/) is the real **Streamlit** web app, running in your browser with **stlite**. There is no server behind it. Fare quotes run the two real fare models in your browser, built from the API's own feature code, so you can price any trip; demand forecasts and explanations are responses recorded from the live API by [scripts/build_static_demo.py](scripts/build_static_demo.py). A banner says so on every page. The first visit takes about 20 to 30 seconds while the browser loads Python and LightGBM.
+
+1. **Overview.** The service status, the three models loaded and their headline test accuracy.
+2. **Demand forecast.** Pick any zones and up to 72 hours. The first two hours come from the model and later hours from the same hour last week, as on the live API.
+3. **Fare prediction.** Enter any trip and press **Predict fare**. Leave the trip duration empty and the booking-time model answers; enter one and the fare model does. Try pickup zone 264, an unknown zone, to see the low-confidence warning, and read the SHAP breakdown under each quote.
+4. **Explainability.** Pick a zone and an hour to see which inputs pushed the demand forecast up or down.
+5. **Responsible AI.** The subgroup error audit for each model, with the groups too small to compare marked, and the global SHAP summaries.
+6. **Monitoring and KPIs.** Next-hour demand by borough, the busiest zones and the offline drift drill.
+
+The live system on AWS, with the API, monitoring jobs and alarms, is described below.
+
+---
+
 ## Contents
 
-1. [Results at a glance](#results-at-a-glance)
-2. [Tech stack](#tech-stack)
-3. [Architecture](#architecture)
-4. [Engineering decisions](#engineering-decisions)
-5. [Dataset](#dataset)
-6. [Quick start](#quick-start)
-7. [Data pipeline](#data-pipeline)
-8. [Model training and registry](#model-training-and-registry)
-9. [Evaluation beyond one test score](#evaluation-beyond-one-test-score)
-10. [Real-time API and batch inference](#real-time-api-and-batch-inference)
-11. [CI/CD and infrastructure on AWS](#cicd-and-infrastructure-on-aws)
-12. [Monitoring: drift and live accuracy](#monitoring-drift-and-live-accuracy)
-13. [Responsible AI](#responsible-ai)
-14. [Streamlit web app](#streamlit-web-app)
-15. [Reproducible golden path](#reproducible-golden-path)
-16. [Issues found and fixed](#issues-found-and-fixed)
-17. [Security](#security)
-18. [Cost](#cost)
-19. [What I would build next](#what-i-would-build-next)
-20. [Limitations](#limitations)
-21. [Repository layout](#repository-layout)
+1. [Try it](#try-it)
+2. [Results at a glance](#results-at-a-glance)
+3. [Tech stack](#tech-stack)
+4. [Architecture](#architecture)
+5. [Engineering decisions](#engineering-decisions)
+6. [Dataset](#dataset)
+7. [Quick start](#quick-start)
+8. [Data pipeline](#data-pipeline)
+9. [Model training and registry](#model-training-and-registry)
+10. [Evaluation beyond one test score](#evaluation-beyond-one-test-score)
+11. [Real-time API and batch inference](#real-time-api-and-batch-inference)
+12. [CI/CD and infrastructure on AWS](#cicd-and-infrastructure-on-aws)
+13. [Monitoring: drift and live accuracy](#monitoring-drift-and-live-accuracy)
+14. [Responsible AI](#responsible-ai)
+15. [Streamlit web app](#streamlit-web-app)
+16. [Reproducible golden path](#reproducible-golden-path)
+17. [Issues found and fixed](#issues-found-and-fixed)
+18. [Security](#security)
+19. [Cost](#cost)
+20. [What I would build next](#what-i-would-build-next)
+21. [Limitations](#limitations)
+22. [Repository layout](#repository-layout)
 
 ---
 
@@ -92,12 +109,12 @@ Models are tuned on a holdout cut from the end of the training period, selected 
 | Evaluation | Block bootstrap confidence intervals, rolling-origin backtests, naive forecasting baselines |
 | Explainability and drift | SHAP, Matplotlib, Population Stability Index, Kolmogorov-Smirnov and chi-square tests (SciPy), Evidently (optional HTML reports) |
 | Serving | FastAPI, Pydantic, Uvicorn, Prometheus instrumentation, SQLite (batch forecasts) |
-| Web app | Streamlit, Plotly |
+| Web app | Streamlit, Plotly; stlite and GitHub Pages for the interactive demo |
 | Configuration | YAML (PyYAML), environment overrides (python-dotenv) |
 | Packaging | uv (hash-checked lockfile), Docker (multi-stage builds, non-root user), Docker Compose |
 | Infrastructure as code | Terraform |
 | Compute and networking | Amazon ECS on Fargate, Application Load Balancer, Amazon CloudFront (HTTPS), Amazon VPC |
-| Delivery | GitHub Actions, Dependabot, GitHub webhooks, AWS CodeBuild, Amazon ECR |
+| Delivery | GitHub Actions, Dependabot, GitHub webhooks, AWS CodeBuild, Amazon ECR, GitHub Pages |
 | Monitoring | Amazon CloudWatch Logs, metrics, alarms and dashboard, Amazon Data Firehose, Amazon SNS |
 | ML operations | Amazon SageMaker Processing, SageMaker Pipelines (gated retraining definition), Amazon EventBridge Scheduler, boto3, SageMaker Python SDK |
 | Storage and analytics | Amazon S3 with versioning, AWS Glue Data Catalog, Amazon Athena |
@@ -744,6 +761,12 @@ API_BASE_URL=http://127.0.0.1:8000 .venv/bin/python -m streamlit run dashboard/a
 
 On AWS the web app runs as its own **ECS** service behind its own load balancer and CloudFront, reads the API key from Parameter Store and calls the API over HTTPS.
 
+The [interactive demo](https://anandapurva55.github.io/nyc-taxi-forecasting/) runs the same code in the browser with **stlite**. In demo mode the two fare models run in the browser, exported as LightGBM model files and fed by the API's own feature code; the build fails unless they reproduce the API's recorded fares exactly. Everything else is answered from a recording of the real API, and every page shows a banner saying so. To record it again after a change, run the command below and push; [.github/workflows/pages.yml](.github/workflows/pages.yml) publishes it.
+
+```bash
+.venv/bin/python -m scripts.build_static_demo
+```
+
 **Results.** Screenshots taken from the AWS deployment.
 
 | | |
@@ -876,6 +899,7 @@ While running, the stack costs about **$4.50 per day**: two load balancers, the 
 | `src/responsible/` | Subgroup error analysis, explainability, model cards |
 | `scripts/` | Command entry points, including `golden_path.sh`, the evaluation and the AWS scripts |
 | `dashboard/` | Streamlit web app |
+| `demo/` | Interactive demo for GitHub Pages: the page, the recording of the real API, the exported fare models and the reports it shows |
 | `docker/` | API, web app and monitoring Dockerfiles, Compose file |
 | `infra/terraform/` | All AWS infrastructure |
 | `pyproject.toml`, `uv.lock` | Dependency groups (runtime, dev, dashboard, monitoring, aws) and the hash-checked lockfile |

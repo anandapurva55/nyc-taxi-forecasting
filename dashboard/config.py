@@ -39,3 +39,17 @@ def responsible_dir() -> Path:
 def drift_dir() -> Path:
     """Directory of drift-job outputs (``<problem>_drift_metrics.json``)."""
     return _path("DRIFT_DIR", _REPO_ROOT / "artifacts" / "drift")
+
+
+def demo_mode() -> bool:
+    """True in the static demo, where answers come from a recording of the real API."""
+    return os.environ.get("TAXI_DEMO") == "1"
+
+
+def demo_recording_path() -> Path:
+    return _path("DEMO_RECORDING", _REPO_ROOT / "demo" / "recording.json")
+
+
+def demo_models_dir() -> Path:
+    """LightGBM model files of the two fare models, used by the static demo."""
+    return _path("DEMO_MODELS_DIR", _REPO_ROOT / "demo" / "models")

@@ -142,3 +142,23 @@ def test_low_volume_groups_are_listed_but_not_compared():
     assert report.worst_group == "Queens"
     only_low = fairness.FairnessReport(dimension="borough", subgroups=report.subgroups[2:] + report.subgroups[:1])
     assert only_low.coverage_gap is True
+
+
+def test_model_card_tables_keep_their_columns():
+    """A stray "|" in a cell or header splits Markdown tables, as it once did for SHAP."""
+    report = fairness.FairnessReport(
+        dimension="borough",
+        subgroups=[
+            fairness.SubgroupMetric("borough", "Manhattan", 100, 2.0, 1.5, 10.0, wape=0.1, mean_actual=15.0),
+            fairness.SubgroupMetric("borough", "Queens", 80, 4.0, 3.0, 25.0, wape=0.2, mean_actual=12.0),
+        ],
+    )
+    card = render_model_card(
+        name="m", problem="fare", algorithm="LightGBM", target="fare_amount",
+        metrics={"rmse": 3.2}, fairness=[report], top_features=[("trip_distance", 10.3)],
+    )
+    for block in card.split("\n\n"):
+        rows = [line for line in block.splitlines() if line.startswith("|")]
+        if rows:
+            widths = {line.count("|") for line in rows}
+            assert len(widths) == 1, f"table with uneven columns:\n{block}"

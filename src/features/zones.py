@@ -37,3 +37,10 @@ def is_jfk_manhattan(pu_location_id: int, do_location_id: int) -> bool:
 def has_unknown_zone(pu_location_id: int, do_location_id: int) -> bool:
     """True when either end of the trip has no usable zone."""
     return pu_location_id in UNKNOWN_ZONES or do_location_id in UNKNOWN_ZONES
+
+
+# Shown with fares for these trips, which had the largest errors in the subgroup audit.
+UNKNOWN_ZONE_NOTE = (
+    "Pickup or drop-off zone is unknown (264 or 265); these trips have the "
+    "largest fare errors in the subgroup audit."
+)

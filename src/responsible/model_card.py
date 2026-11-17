@@ -59,7 +59,8 @@ def _importance_section(top_features: Sequence[tuple[str, float]]) -> str:
     if not top_features:
         return "_No feature-importance data available._"
     rows = "\n".join(f"| {name} | {value:.4f} |" for name, value in top_features)
-    return "| Feature | Mean |SHAP| |\n|---------|-----------|\n" + rows
+    # No "|" in the header: it is Markdown's column separator and would break the table.
+    return "| Feature | Mean absolute SHAP value |\n|---------|-----------|\n" + rows
 
 
 def render_model_card(

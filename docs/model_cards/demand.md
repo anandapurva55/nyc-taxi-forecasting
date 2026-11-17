@@ -68,7 +68,7 @@ Disparity ratio (worst/best WAPE): **1.17** (threshold 1.5) - ok. RMSE ratio for
 
 ## Top features (SHAP)
 
-| Feature | Mean |SHAP| |
+| Feature | Mean absolute SHAP value |
 |---------|-----------|
 | lag_168 | 13.3500 |
 | lag_1 | 11.9386 |

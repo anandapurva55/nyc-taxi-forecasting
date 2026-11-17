@@ -1,0 +1,157 @@
+{
+  "problem": "fare",
+  "n_current": 1500,
+  "n_features": 16,
+  "n_drifted": 2,
+  "share_drifted": 0.125,
+  "drifted": true,
+  "psi_threshold": 0.2,
+  "ks_alpha": 0.05,
+  "features": [
+    {
+      "feature": "trip_distance",
+      "psi": 0.005038796256045736,
+      "statistic": 0.016339872857546844,
+      "pvalue": 0.8120380991799605,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "passenger_count",
+      "psi": 0.001214304299032353,
+      "statistic": 0.014466797408184129,
+      "pvalue": 0.9076987712236749,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "trip_duration_min",
+      "psi": 0.003831671466001231,
+      "statistic": 0.010774647163166229,
+      "pvalue": 0.9942896737823984,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "PULocationID",
+      "psi": 12.375403592739254,
+      "statistic": 26543.54977586868,
+      "pvalue": 0.0,
+      "drifted": true,
+      "kind": "categorical",
+      "test": "chi2"
+    },
+    {
+      "feature": "DOLocationID",
+      "psi": 10.685546411945142,
+      "statistic": 11251.741361900715,
+      "pvalue": 0.0,
+      "drifted": true,
+      "kind": "categorical",
+      "test": "chi2"
+    },
+    {
+      "feature": "hour",
+      "psi": 0.0035012394942188084,
+      "statistic": 0.020369876077117932,
+      "pvalue": 0.5557020479255523,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "day_of_week",
+      "psi": 0.005326597745504356,
+      "statistic": 0.015601764765650783,
+      "pvalue": 0.8531215474747991,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "month",
+      "psi": 0.0,
+      "statistic": 0.0,
+      "pvalue": 1.0,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "is_weekend",
+      "psi": 0.0,
+      "statistic": 0.011149581516968876,
+      "pvalue": 0.9912972933495676,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "is_holiday",
+      "psi": 0.0,
+      "statistic": 0.006150110359061767,
+      "pvalue": 0.9999999923499824,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "hour_sin",
+      "psi": 0.0022893315088774757,
+      "statistic": 0.0146935225412822,
+      "pvalue": 0.8977527380217726,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "hour_cos",
+      "psi": 0.0024702434599746534,
+      "statistic": 0.01632046851492086,
+      "pvalue": 0.8131642427651979,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "dow_sin",
+      "psi": 0.005887215769812908,
+      "statistic": 0.015601764765650727,
+      "pvalue": 0.8531215474748022,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "dow_cos",
+      "psi": 0.005407491874027169,
+      "statistic": 0.026751346282619576,
+      "pvalue": 0.22953511555619388,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "airport_trip",
+      "psi": 0.0,
+      "statistic": 0.0041155226171807335,
+      "pvalue": 1.0,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    },
+    {
+      "feature": "jfk_manhattan",
+      "psi": 0.0,
+      "statistic": 0.010945465607513416,
+      "pvalue": 0.9930422805391464,
+      "drifted": false,
+      "kind": "numeric",
+      "test": "ks"
+    }
+  ],
+  "prediction_drift": null
+}

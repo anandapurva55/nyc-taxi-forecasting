@@ -1,0 +1,59 @@
+# Publishes the interactive demo on GitHub Pages: no server, no AWS, no cost.
+# The web app's own Streamlit code runs in the browser with stlite. Demand
+# forecasts and explanations come from demo/recording.json, recorded from the
+# real API by scripts/build_static_demo.py, and the two fare models run in the
+# browser with the API's own feature code. A banner says so on every page.
+name: Interactive demo on GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "demo/**"
+      - "dashboard/**"
+      - "docs/model_cards/**"
+      - "src/**"
+      - "config/config.yaml"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Assemble the site
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy the page, the recording and the web app's files
+        run: |
+          mkdir -p _site/dashboard _site/docs _site/src _site/config
+          cp -r demo/. _site/
+          cp dashboard/*.py _site/dashboard/
+          cp -r docs/model_cards _site/docs/
+          cp src/__init__.py src/config.py _site/src/
+          cp -r src/features src/serving _site/src/
+          cp config/config.yaml _site/config/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

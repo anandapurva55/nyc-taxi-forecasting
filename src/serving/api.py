@@ -228,10 +228,7 @@ def predict_fare(
     )
     notes = []
     if zones.has_unknown_zone(payload.pu_location_id, payload.do_location_id):
-        notes.append(
-            "Pickup or drop-off zone is unknown (264 or 265); these trips have the "
-            "largest fare errors in the subgroup audit."
-        )
+        notes.append(zones.UNKNOWN_ZONE_NOTE)
     return FareResponse(
         predicted_fare=round(predicted, 2),
         model=_model_version(svc, fare_problem),

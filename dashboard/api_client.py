@@ -8,7 +8,7 @@ from typing import Any
 import requests
 import streamlit as st
 
-from dashboard.config import api_base_url
+from dashboard.config import api_base_url, demo_mode
 
 _TIMEOUT = 60
 
@@ -66,3 +66,16 @@ def predict_demand(zone: int, target_hour: str) -> dict[str, Any]:
 
 def explain_demand(zone: int, target_hour: str) -> dict[str, Any]:
     return _post("/explain/demand", {"zone": zone, "target_hour": target_hour})
+
+
+# In the static demo, every call is answered from a recording of the real API.
+if demo_mode():
+    from dashboard import demo_backend as _recorded
+
+    health = _recorded.health  # noqa: F811
+    forecast_demand = _recorded.forecast_demand  # noqa: F811
+    known_zones = _recorded.known_zones  # noqa: F811
+    predict_fare = _recorded.predict_fare  # noqa: F811
+    explain_fare = _recorded.explain_fare  # noqa: F811
+    predict_demand = _recorded.predict_demand  # noqa: F811
+    explain_demand = _recorded.explain_demand  # noqa: F811
