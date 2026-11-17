@@ -10,7 +10,7 @@
 
 # The official Python image through Amazon ECR Public, which AWS builds can pull
 # without Docker Hub's anonymous rate limit.
-FROM public.ecr.aws/docker/library/python:3.11-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.15-slim AS builder
 
 # uv installs the exact versions in uv.lock (hash-checked) into /opt/venv with
 # the image's own Python. --frozen fails the build if the lock is out of date.
@@ -30,7 +30,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --group monitoring --no-install-project
 
-FROM public.ecr.aws/docker/library/python:3.11-slim AS runtime
+FROM public.ecr.aws/docker/library/python:3.15-slim AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \

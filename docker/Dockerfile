@@ -4,7 +4,7 @@
 # --- Builder: install dependencies into a venv --------------------------------
 # The official Python image through Amazon ECR Public, which AWS builds can pull
 # without Docker Hub's anonymous rate limit.
-FROM public.ecr.aws/docker/library/python:3.11-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.15-slim AS builder
 
 # uv installs the exact versions in uv.lock (hash-checked) into /opt/venv with
 # the image's own Python. --frozen fails the build if the lock is out of date.
@@ -25,7 +25,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # --- Runtime: copy venv + source ---------------------------------------------
-FROM public.ecr.aws/docker/library/python:3.11-slim AS runtime
+FROM public.ecr.aws/docker/library/python:3.15-slim AS runtime
 
 # libgomp1 is required at runtime by XGBoost / LightGBM.
 RUN apt-get update \
