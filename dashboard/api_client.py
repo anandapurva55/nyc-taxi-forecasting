@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import requests
@@ -15,7 +16,10 @@ _TIMEOUT = 60
 @st.cache_resource
 def _session() -> requests.Session:
     """Shared keep-alive session so repeated calls skip the TCP handshake."""
-    return requests.Session()
+    session = requests.Session()
+    if os.environ.get("API_KEY"):
+        session.headers["X-API-Key"] = os.environ["API_KEY"]
+    return session
 
 
 def _post(path: str, payload: dict[str, Any]) -> dict[str, Any]:

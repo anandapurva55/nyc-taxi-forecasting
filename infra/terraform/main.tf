@@ -46,11 +46,11 @@ resource "aws_ecr_lifecycle_policy" "api" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep last 5 images"
+        description  = "Keep the last 20 images so any recent release can be rolled back"
         selection = {
           tagStatus   = "any"
           countType   = "imageCountMoreThan"
-          countNumber = 5
+          countNumber = 20
         }
         action = { type = "expire" }
       }
@@ -194,7 +194,16 @@ resource "aws_ecs_task_definition" "api" {
         }
       ]
       # The image is self-contained; MLFLOW_TRACKING_URI is baked into the
-      # Dockerfile. No RDS/S3 configuration is required.
+      # Dockerfile. No RDS/S3 configuration is required. Access controls are
+      # configured here: rate limit and CORS as plain settings, and the API key
+      # as a secret read from SSM Parameter Store at task start.
+      environment = [
+        { name = "RATE_LIMIT_PER_MINUTE", value = tostring(var.api_rate_limit_per_minute) },
+        { name = "CORS_ALLOW_ORIGINS", value = join(",", var.api_cors_allow_origins) },
+      ]
+      secrets = var.api_key == "" ? [] : [
+        { name = "API_KEY", valueFrom = aws_ssm_parameter.api_key[0].arn },
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -228,3 +237,28 @@ resource "aws_ecs_service" "api" {
 
   depends_on = [aws_lb_listener.http]
 }
+
+# --- API key (optional): encrypted in SSM, injected as a container secret ------
+resource "aws_ssm_parameter" "api_key" {
+  count = var.api_key == "" ? 0 : 1
+  name  = "/${local.name}/api-key"
+  type  = "SecureString"
+  value = var.api_key
+}
+
+resource "aws_iam_role_policy" "task_execution_api_key" {
+  count = var.api_key == "" ? 0 : 1
+  name  = "${local.name}-read-api-key"
+  role  = aws_iam_role.task_execution.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameters"]
+        Resource = [aws_ssm_parameter.api_key[0].arn]
+      }
+    ]
+  })
+}
+

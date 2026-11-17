@@ -180,7 +180,9 @@ def test_forecast_demand_endpoint(client):
     body = resp.json()
     assert body["horizon_hours"] == 3
     assert body["zones"] == 1
-    assert body["model_reference"] == "latest"
+    # The in-process test service has no registry versions, so it reports the
+    # configured reference.
+    assert body["model_reference"] == "champion"
     assert body["request_id"]
     assert len(body["points"]) == 3
     for point in body["points"]:
@@ -200,3 +202,103 @@ def test_forecast_demand_unknown_zone_returns_400(client):
     )
     assert resp.status_code == 400
 
+
+FARE_BODY = {
+    "trip_distance": 3.4,
+    "pu_location_id": 1,
+    "do_location_id": 2,
+    "passenger_count": 1,
+    "pickup_datetime": "2024-02-27T18:30:00",
+}
+
+
+def test_version_endpoint_reports_build_info(client, tmp_path, monkeypatch):
+    from src.serving import api
+
+    info = {
+        "git_commit": "abc1234",
+        "built_at": "2026-11-17T10:00:00+00:00",
+        "models": [{"name": "taxi-fare-predictor", "version": 2, "run_id": "r1"}],
+        "inputs": {"mlflow.db": "deadbeef"},
+    }
+    path = tmp_path / "build_info.json"
+    path.write_text(json.dumps(info))
+    monkeypatch.setattr(api, "BUILD_INFO_PATH", path)
+    c, _ = client
+    body = c.get("/version").json()
+    assert body["git_commit"] == "abc1234"
+    assert body["inputs"] == {"mlflow.db": "deadbeef"}
+    assert body["fare_without_duration"] == "fixed duration estimate"
+    assert body["demand_model_horizon_hours"] == 2
+
+
+def test_api_key_protects_prediction_endpoints(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "s3cret")
+    c, _ = client
+    assert c.post("/predict/fare", json=FARE_BODY).status_code == 401
+    assert c.post("/predict/fare", json=FARE_BODY, headers={"X-API-Key": "wrong"}).status_code == 401
+    assert c.post("/predict/fare", json=FARE_BODY, headers={"X-API-Key": "s3cret"}).status_code == 200
+    # Health stays open for load balancer checks.
+    assert c.get("/health").status_code == 200
+
+
+def test_rate_limit_returns_429_after_budget(client, monkeypatch):
+    from src.serving.security import limiter
+
+    limiter.reset()
+    monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "2")
+    c, _ = client
+    codes = [c.post("/predict/fare", json=FARE_BODY).status_code for _ in range(3)]
+    assert codes == [200, 200, 429]
+    assert c.get("/health").status_code == 200
+    limiter.reset()
+
+
+def test_unknown_zone_fare_is_flagged_low_confidence(client):
+    c, _ = client
+    body = c.post("/predict/fare", json={**FARE_BODY, "do_location_id": 264}).json()
+    assert body["low_confidence"] is True
+    assert body["notes"]
+    normal = c.post("/predict/fare", json=FARE_BODY).json()
+    assert normal["low_confidence"] is False
+
+
+def test_fare_response_names_the_model_that_answered(client, clean_trips_df):
+    from sklearn.tree import DecisionTreeRegressor
+
+    from src.features.fare_features import build_fare_features
+    from src.models import common
+    from src.serving import service as service_module
+
+    c, _ = client
+    assert c.post("/predict/fare", json=FARE_BODY).json()["duration_estimated"] is True
+
+    Xb, yb = common.split_to_xy(build_fare_features(clean_trips_df), "fare_booking")
+    svc = service_module._service
+    svc.fare_booking_model = DecisionTreeRegressor(max_depth=3, random_state=0).fit(Xb, yb)
+    svc.model_versions = {
+        "fare": {"name": "taxi-fare-predictor", "version": 2},
+        "fare_booking": {"name": "taxi-fare-booking", "version": 1},
+    }
+    booking = c.post("/predict/fare", json=FARE_BODY).json()
+    assert booking["model"] == "taxi-fare-booking/1"
+    assert booking["duration_estimated"] is False
+    full = c.post("/predict/fare", json={**FARE_BODY, "trip_duration_min": 14.0}).json()
+    assert full["model"] == "taxi-fare-predictor/2"
+    assert c.post("/explain/fare", json=FARE_BODY).status_code == 200
+
+
+def test_forecast_points_report_their_method(client):
+    c, demand = client
+    zone = int(demand["PULocationID"].iloc[0])
+    body = c.post("/forecast/demand", json={"horizon_hours": 4, "zones": [zone]}).json()
+    assert body["model_horizon_hours"] == 2
+    assert [p["method"] for p in body["points"]] == ["model", "model", "same_hour_last_week", "same_hour_last_week"]
+
+    last = pd.Timestamp(demand["pickup_hour"].max())
+    far = c.post("/predict/demand", json={"zone": zone, "target_hour": (last + pd.Timedelta(hours=5)).isoformat()})
+    assert far.json()["method"] == "same_hour_last_week"
+    explain_far = c.post(
+        "/explain/demand", json={"zone": zone, "target_hour": (last + pd.Timedelta(hours=5)).isoformat()}
+    )
+    assert explain_far.status_code == 400

@@ -5,8 +5,9 @@
 # bucket for captured inference data + drift reports, an SNS alert topic, a
 # Kinesis Firehose that ships the API's prediction-capture logs to S3, CloudWatch
 # alarms + dashboard, a SageMaker execution role for the drift/retraining jobs,
-# and an EventBridge schedule that triggers the SageMaker retraining pipeline
-# weekly when retrain_pipeline_arn is set.
+# and EventBridge schedules for the drift jobs (one per model), the live
+# demand-accuracy job and, when retrain_pipeline_arn is set, the SageMaker
+# retraining pipeline.
 #
 # No always-on SageMaker endpoint is created - serving stays on ECS Fargate.
 # =============================================================================
@@ -272,6 +273,21 @@ resource "aws_cloudwatch_metric_alarm" "drift" {
   alarm_actions       = [aws_sns_topic.alerts[0].arn]
 }
 
+resource "aws_cloudwatch_metric_alarm" "performance" {
+  count               = local.drift_enabled
+  alarm_name          = "${local.name}-demand-accuracy"
+  alarm_description   = "Live demand error exceeded the model's test baseline by more than the tolerance."
+  namespace           = "TaxiForecasting/Performance"
+  metric_name         = "PerformanceDegraded"
+  statistic           = "Maximum"
+  period              = 86400
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts[0].arn]
+}
+
 resource "aws_cloudwatch_metric_alarm" "api_5xx" {
   count               = local.monitoring_enabled
   alarm_name          = "${local.name}-api-5xx"
@@ -407,8 +423,8 @@ resource "aws_scheduler_schedule" "retrain" {
 # reads Firehose-captured records from S3, writes drift_metrics.json back to S3,
 # and publishes drift metrics to CloudWatch (feeding the existing drift alarm).
 resource "aws_scheduler_schedule" "drift" {
-  count = local.drift_enabled
-  name  = "${local.name}-drift"
+  for_each = local.drift_enabled == 1 ? toset(var.drift_problems) : toset([])
+  name     = "${local.name}-drift-${each.key}"
 
   flexible_time_window {
     mode = "OFF"
@@ -420,13 +436,13 @@ resource "aws_scheduler_schedule" "drift" {
     arn      = "arn:aws:scheduler:::aws-sdk:sagemaker:createProcessingJob"
     role_arn = aws_iam_role.scheduler[0].arn
     input = jsonencode({
-      ProcessingJobName = "${local.name}-drift-<aws.scheduler.execution-id>"
+      ProcessingJobName = "${local.name}-drift-${each.key}-<aws.scheduler.execution-id>"
       RoleArn           = aws_iam_role.sagemaker[0].arn
       AppSpecification = {
         ImageUri            = var.monitoring_image_uri
         ContainerEntrypoint = ["python3", "scripts/monitoring/run_drift_job.py"]
         ContainerArguments = [
-          "--problem", var.drift_problem,
+          "--problem", each.key,
           "--current-s3", "s3://${aws_s3_bucket.monitoring[0].bucket}/captured/",
           "--output-dir", "/opt/ml/processing/output",
           "--namespace", "TaxiForecasting/Drift",
@@ -450,7 +466,63 @@ resource "aws_scheduler_schedule" "drift" {
           {
             OutputName = "drift"
             S3Output = {
-              S3Uri        = "s3://${aws_s3_bucket.monitoring[0].bucket}/drift-reports/"
+              S3Uri        = "s3://${aws_s3_bucket.monitoring[0].bucket}/drift-reports/${each.key}/"
+              LocalPath    = "/opt/ml/processing/output"
+              S3UploadMode = "EndOfJob"
+            }
+          }
+        ]
+      }
+    })
+  }
+}
+
+# --- EventBridge Scheduler: live demand-accuracy Processing job (weekly) ------
+# Joins captured demand predictions to realised pickup counts uploaded to
+# s3://<monitoring bucket>/<performance_actuals_key> and publishes live RMSE,
+# MAE, WAPE and PerformanceDegraded to CloudWatch (feeding the accuracy alarm).
+resource "aws_scheduler_schedule" "performance" {
+  count = local.drift_enabled
+  name  = "${local.name}-performance"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression = var.performance_schedule
+
+  target {
+    arn      = "arn:aws:scheduler:::aws-sdk:sagemaker:createProcessingJob"
+    role_arn = aws_iam_role.scheduler[0].arn
+    input = jsonencode({
+      ProcessingJobName = "${local.name}-performance-<aws.scheduler.execution-id>"
+      RoleArn           = aws_iam_role.sagemaker[0].arn
+      AppSpecification = {
+        ImageUri            = var.monitoring_image_uri
+        ContainerEntrypoint = ["python3", "scripts/monitoring/run_performance_job.py"]
+        ContainerArguments = [
+          "--current-s3", "s3://${aws_s3_bucket.monitoring[0].bucket}/captured/",
+          "--actuals", "s3://${aws_s3_bucket.monitoring[0].bucket}/${var.performance_actuals_key}",
+          "--output-dir", "/opt/ml/processing/output",
+          "--namespace", "TaxiForecasting/Performance",
+        ]
+      }
+      Environment = {
+        AWS_DEFAULT_REGION = var.aws_region
+      }
+      ProcessingResources = {
+        ClusterConfig = {
+          InstanceCount  = 1
+          InstanceType   = var.drift_instance_type
+          VolumeSizeInGB = 20
+        }
+      }
+      ProcessingOutputConfig = {
+        Outputs = [
+          {
+            OutputName = "performance"
+            S3Output = {
+              S3Uri        = "s3://${aws_s3_bucket.monitoring[0].bucket}/performance-reports/"
               LocalPath    = "/opt/ml/processing/output"
               S3UploadMode = "EndOfJob"
             }

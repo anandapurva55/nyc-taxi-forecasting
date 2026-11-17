@@ -29,7 +29,7 @@ class FareRequest(BaseModel):
                 "pu_location_id": 132,
                 "do_location_id": 230,
                 "passenger_count": 1,
-                "pickup_datetime": "2024-01-15T18:30:00",
+                "pickup_datetime": "2024-02-27T18:30:00",
             }
         }
     }
@@ -37,9 +37,22 @@ class FareRequest(BaseModel):
 
 class FareResponse(BaseModel):
     predicted_fare: float = Field(..., description="Predicted fare amount (USD).")
-    duration_estimated: bool = Field(
-        ..., description="True if trip_duration_min was estimated from distance."
+    model: str = Field(
+        ...,
+        description="Registered model that answered: the fare model when trip_duration_min "
+        "is sent, the booking-time model (trained without duration) when it is not.",
     )
+    duration_estimated: bool = Field(
+        ...,
+        description="True if trip_duration_min was not supplied and had to be estimated "
+        "(only when no booking-time model is registered).",
+    )
+    low_confidence: bool = Field(
+        False,
+        description="True when the trip has an unknown pickup or drop-off zone, the "
+        "group with the largest errors in the subgroup audit.",
+    )
+    notes: list[str] = Field(default_factory=list, description="Reasons behind low_confidence.")
     request_id: str
 
 
@@ -53,7 +66,7 @@ class DemandRequest(BaseModel):
 
     model_config = {
         "json_schema_extra": {
-            "example": {"zone": 132, "target_hour": "2024-01-31T20:00:00"}
+            "example": {"zone": 132, "target_hour": "2024-02-29T20:00:00"}
         }
     }
 
@@ -62,11 +75,14 @@ class DemandResponse(BaseModel):
     zone: int
     target_hour: datetime
     predicted_pickups: float = Field(..., description="Predicted pickup count (>= 0).")
+    method: str = Field(
+        ..., description='"model", or "same_hour_last_week" beyond the model horizon.'
+    )
     request_id: str
 
 
 class ForecastRequest(BaseModel):
-    """Inputs for a multi-hour recursive demand forecast."""
+    """Inputs for a multi-hour demand forecast."""
 
     horizon_hours: int = Field(
         24, ge=1, le=168, description="Number of hours to forecast ahead."
@@ -91,12 +107,18 @@ class ForecastPoint(BaseModel):
     zone: int
     pickup_hour: datetime
     predicted_pickups: float = Field(..., description="Predicted pickup count (>= 0).")
+    method: str = Field(
+        ..., description='"model", or "same_hour_last_week" beyond the model horizon.'
+    )
 
 
 class ForecastResponse(BaseModel):
-    """A recursive multi-hour demand forecast for one or more zones."""
+    """A multi-hour demand forecast for one or more zones."""
 
     horizon_hours: int
+    model_horizon_hours: int = Field(
+        ..., description="Hours past the latest observed hour served by the model."
+    )
     zones: int
     points: list[ForecastPoint]
     model_reference: str
@@ -107,6 +129,7 @@ class HealthResponse(BaseModel):
     status: str
     demand_model_loaded: bool
     fare_model_loaded: bool
+    fare_booking_model_loaded: bool = False
     history_hours: int
     zones: int
 
@@ -126,3 +149,18 @@ class ExplainResponse(BaseModel):
         ..., description="Per-feature SHAP contributions, ranked by absolute impact."
     )
     request_id: str
+
+
+class VersionResponse(BaseModel):
+    """Provenance of the running service."""
+
+    git_commit: str = Field(..., description="Commit the image was built from.")
+    built_at: str | None = None
+    models: dict = Field(..., description="Registered model name and version per problem.")
+    inputs: dict = Field(default_factory=dict, description="SHA-256 of baked input files.")
+    fare_without_duration: str = Field(
+        ..., description="How fares are quoted when trip_duration_min is not sent."
+    )
+    demand_model_horizon_hours: int = Field(
+        ..., description="Hours ahead served by the demand model before the weekly rule."
+    )

@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Submit training to SageMaker.")
     parser.add_argument("--role-arn", required=True, help="SageMaker execution role ARN.")
     parser.add_argument("--image-uri", required=True, help="Training image URI (ECR).")
-    parser.add_argument("--problem", choices=["demand", "fare", "both"], default="both")
+    parser.add_argument("--problem", choices=["demand", "fare", "fare_booking", "all"], default="all")
     parser.add_argument("--n-trials", type=int, default=None, help="Optuna trials per estimator.")
     parser.add_argument(
         "--no-register", action="store_true", help="Skip the MLflow Model Registry."

@@ -1,0 +1,53 @@
+{
+  "demand": {
+    "model": {
+      "name": "taxi-demand-forecaster",
+      "version": 2,
+      "alias": "champion"
+    },
+    "test_metrics": {
+      "rmse": 11.364119227291082,
+      "mae": 3.486504335948073,
+      "mape": 43.16720561146206,
+      "r2": 0.9678568144537276
+    },
+    "test_rmse_ci95": [
+      9.758841595972648,
+      13.04758697393423
+    ]
+  },
+  "fare": {
+    "model": {
+      "name": "taxi-fare-predictor",
+      "version": 2,
+      "alias": "champion"
+    },
+    "test_metrics": {
+      "rmse": 3.212957030433418,
+      "mae": 0.7741415871618003,
+      "mape": 5.6568363376341,
+      "r2": 0.9623815776844856
+    },
+    "test_rmse_ci95": [
+      3.0040065426086824,
+      3.429264109822367
+    ]
+  },
+  "fare_booking": {
+    "model": {
+      "name": "taxi-fare-booking",
+      "version": 1,
+      "alias": "champion"
+    },
+    "test_metrics": {
+      "rmse": 3.9770593814945783,
+      "mae": 1.8156244318751462,
+      "mape": 12.849008076725148,
+      "r2": 0.9423612048715075
+    },
+    "test_rmse_ci95": [
+      3.753668908091534,
+      4.18675275369101
+    ]
+  }
+}

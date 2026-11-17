@@ -172,12 +172,28 @@ def test_train_problem_selects_winner_logs_artifacts_and_registers(monkeypatch, 
     monkeypatch.setattr(
         tuning,
         "tune_estimator",
-        lambda estimator, *args, **kwargs: {"best_params": {"name": estimator}},
+        lambda estimator, *args, **kwargs: {"best_params": {"name": estimator}, "best_value": 1.0},
     )
 
     class FakeModel:
+        def fit(self, features, target):
+            return self
+
         def predict(self, features):
             return np.zeros(len(features))
+
+    monkeypatch.setattr(common, "make_estimator", lambda *args, **kwargs: FakeModel())
+    monkeypatch.setattr(common, "hour_blocks", lambda config, problem, split: np.array([0, 1]))
+    monkeypatch.setattr(train.uncertainty, "block_bootstrap_ci", lambda *args, **kwargs: (2.0, 3.0))
+    monkeypatch.setattr(
+        train.uncertainty, "paired_difference_ci", lambda *args, **kwargs: (-1.0, -1.5, -0.5)
+    )
+    aliases = []
+    monkeypatch.setattr(
+        train.mlflow,
+        "MlflowClient",
+        lambda: SimpleNamespace(set_registered_model_alias=lambda *a: aliases.append(a)),
+    )
 
     validation_rmse = {"first": 3.0, "second": 2.0}
     monkeypatch.setattr(
@@ -206,6 +222,7 @@ def test_train_problem_selects_winner_logs_artifacts_and_registers(monkeypatch, 
     monkeypatch.setattr(train.mlflow, "log_params", lambda *args, **kwargs: None)
     monkeypatch.setattr(train.mlflow, "log_metrics", lambda *args, **kwargs: None)
     monkeypatch.setattr(train.mlflow, "set_tag", lambda *args, **kwargs: None)
+    monkeypatch.setattr(train.mlflow, "log_metric", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         train.mlflow,
         "log_artifact",
@@ -241,8 +258,13 @@ def test_train_problem_selects_winner_logs_artifacts_and_registers(monkeypatch, 
     result = train.train_problem("demand", config, n_trials=2)
 
     assert result["best_estimator"] == "second"
-    assert result["registered"] == {"name": "demand-model", "version": "7"}
+    assert result["registered"] == {"name": "demand-model", "version": 7, "alias": "champion"}
+    assert aliases == [("demand-model", "champion", "7")]
     assert result["results"][1]["run_id"] == "run-demand-second"
+    assert result["selection"]["clear_winner"] is True
+    assert result["final"]["trained_on"] == "train+val"
+    assert result["final"]["run_id"] == "run-demand-second-final"
+    assert result["final"]["test_metrics_ci95"] == {"rmse": [2.0, 3.0]}
     assert len(logged_artifacts) == 3
 
 

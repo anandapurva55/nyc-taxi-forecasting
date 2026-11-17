@@ -29,7 +29,7 @@ from src.data.ingestion import (
     trip_filename,
 )
 from src.data.splits import time_based_split
-from src.data.validation import clean_trips
+from src.data.validation import clean_trips, select_pickups
 from src.features.demand_features import build_demand_features
 from src.features.fare_features import build_fare_features
 
@@ -65,7 +65,9 @@ def run(year: int | None, month: int | None, skip_download: bool) -> dict:
     _write_parquet(clean, config.processed_dir / "trips_clean.parquet")
 
     # 3. Demand aggregation --------------------------------------------------
-    demand = aggregate_hourly_demand(clean)
+    # Demand counts every real pickup, not only trips that pass the fare rules.
+    pickups, pickup_report = select_pickups(raw_trips, year=year, month=month)
+    demand = aggregate_hourly_demand(pickups)
     _write_parquet(demand, config.processed_dir / "demand_hourly.parquet")
 
     # 4. Feature engineering -------------------------------------------------
@@ -88,6 +90,7 @@ def run(year: int | None, month: int | None, skip_download: bool) -> dict:
         "year": year,
         "month": month,
         "cleaning": report.as_dict(),
+        "demand_pickups": pickup_report.as_dict(),
         "demand_feature_rows": len(demand_feats),
         "fare_feature_rows": len(fare_feats),
     }

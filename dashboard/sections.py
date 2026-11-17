@@ -13,9 +13,9 @@ from dashboard import api_client, data
 
 # Assumed average fare per pickup, used only for the illustrative revenue KPI.
 _AVG_FARE_USD = 18.0
-# Horizon (hours) used for the interactive demand chart. A full city-wide,
-# multi-hour recursive forecast over every zone is expensive, so the monitoring
-# KPIs below use a fast single-hour, all-zone forecast instead.
+# Horizon (hours) used for the monitoring KPIs. A full city-wide multi-hour
+# forecast over every zone is expensive, so the KPIs use a fast single-hour,
+# all-zone forecast instead.
 _KPI_HORIZON = 1
 
 
@@ -33,12 +33,15 @@ def overview() -> None:
     st.title("🚕 NYC Taxi Forecasting - MLOps Showcase")
     st.markdown(
         """
-This platform serves **two models** trained on NYC TLC Yellow Taxi trips from
+This platform serves **three models** trained on NYC TLC Yellow Taxi trips from
 February 2024:
 
-- **Demand forecaster** (XGBoost): hourly pickup counts per taxi zone, with
-  recursive multi-hour forecasting.
+- **Demand forecaster** (XGBoost): hourly pickup counts per taxi zone for the
+  next two hours. Further ahead, forecasts use the count at the same hour last
+  week, which was more accurate in the backtest.
 - **Fare predictor** (LightGBM): trip fare from distance, zones, time and duration.
+- **Booking-time fare model**: the same fare, quoted before the trip without
+  the duration.
 
 The system runs as eight connected stages: data pipeline → model training →
 FastAPI serving → CI/CD and infrastructure → monitoring and drift detection →
@@ -60,7 +63,9 @@ analysis reports.
     c3.metric("History hours", h.get("history_hours", 0))
     c4.metric(
         "Models loaded",
-        int(h.get("demand_model_loaded", False)) + int(h.get("fare_model_loaded", False)),
+        int(h.get("demand_model_loaded", False))
+        + int(h.get("fare_model_loaded", False))
+        + int(h.get("fare_booking_model_loaded", False)),
     )
 
     st.subheader("Headline model quality")
@@ -84,7 +89,10 @@ analysis reports.
 # --------------------------------------------------------------------------- #
 def demand_forecast() -> None:
     st.title("📈 Demand Forecast")
-    st.caption("Recursive multi-hour pickup forecasts via `POST /forecast/demand`.")
+    st.caption(
+        "Multi-hour pickup forecasts via `POST /forecast/demand`: the model for the next "
+        "two hours, then the same hour last week."
+    )
 
     try:
         zones = api_client.known_zones()
@@ -194,6 +202,7 @@ def fare_prediction() -> None:
         return
 
     st.metric("Predicted fare", f"${pred['predicted_fare']:.2f}")
+    st.caption(f"Answered by `{pred.get('model', 'unknown')}`.")
     if pred.get("duration_estimated"):
         st.caption("Trip duration was estimated from distance.")
 
@@ -263,20 +272,37 @@ def _render_contributions(explanation: dict, title: str) -> None:
 # --------------------------------------------------------------------------- #
 def responsible_ai() -> None:
     st.title("⚖️ Responsible AI")
-    problem = st.radio("Model", ("demand", "fare"), horizontal=True)
+    labels = {"demand": "Demand", "fare": "Fare", "fare_booking": "Fare at booking time"}
+    problem = st.radio("Model", list(labels), format_func=labels.get, horizontal=True)
 
     report = data.fairness_report(problem)
     if report:
         st.subheader("Fairness across subgroups")
         for dim in report["dimensions"]:
+            if dim.get("coverage_gap"):
+                st.markdown(
+                    f"**{dim['dimension']}** - coverage gap: fewer than two groups with enough "
+                    "volume in the evaluation data, so it could not be audited."
+                )
+                continue
             flag = "🚩 flagged" if dim["flagged"] else "✓ within threshold"
+            metric = dim.get("disparity_metric", "rmse").upper()
             st.markdown(
-                f"**{dim['dimension']}** - disparity ratio "
+                f"**{dim['dimension']}** - disparity ratio ({metric}) "
                 f"{dim['disparity_ratio']:.2f} (threshold {dim['threshold']}) · {flag}"
             )
-            sub = pd.DataFrame(dim["subgroups"]).sort_values("rmse", ascending=False)
+            low = dim.get("low_volume_groups") or []
+            if low:
+                st.caption(
+                    f"Not in the ratio (mean actual below {dim.get('min_mean_actual', 1):g}, too small "
+                    f"for a stable WAPE): {', '.join(low)}."
+                )
+            sub = pd.DataFrame(dim["subgroups"])
+            sub["in_ratio"] = ~sub["group"].isin(low)
+            sort_col = "wape" if "wape" in sub.columns else "rmse"
+            cols = [c for c in ("group", "n", "mean_actual", "wape", "rmse", "mae", "in_ratio") if c in sub.columns]
             st.dataframe(
-                sub[["group", "n", "rmse", "mae", "mape"]],
+                sub.sort_values(sort_col, ascending=False)[cols],
                 use_container_width=True,
                 hide_index=True,
             )
@@ -374,8 +400,9 @@ def _render_drift_panel() -> None:
         return
 
     st.caption(
-        "Live view of the drift job's output (PSI ≥ threshold ⇒ drifted). Same "
-        "report the scheduled SageMaker job writes to S3 in production."
+        "Offline drift drill bundled with this dashboard: selected features are shifted "
+        "on purpose to show that detection works (PSI ≥ threshold ⇒ drifted). The "
+        "scheduled SageMaker job writes the same report from live traffic to S3."
     )
 
     for report in reports:
@@ -418,9 +445,11 @@ def _render_drift_panel() -> None:
                 annotation_text=f"threshold {threshold}",
             )
             st.plotly_chart(fig, use_container_width=True)
-            with st.expander("Per-feature detail (PSI / KS)", expanded=False):
+            with st.expander("Per-feature detail (PSI, KS or chi-square)", expanded=False):
+                cols = [c for c in ("feature", "kind", "psi", "test", "statistic", "pvalue",
+                                    "ks_statistic", "ks_pvalue", "drifted") if c in fdf.columns]
                 st.dataframe(
-                    fdf[["feature", "psi", "ks_statistic", "ks_pvalue", "drifted"]],
+                    fdf[cols],
                     use_container_width=True,
                     hide_index=True,
                 )

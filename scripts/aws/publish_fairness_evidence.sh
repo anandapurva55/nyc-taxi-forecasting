@@ -26,10 +26,13 @@ mkdir -p logs
 ITEMS=(
     "demand fairness-report artifacts/responsible/demand_fairness.json"
     "fare fairness-report artifacts/responsible/fare_fairness.json"
+    "fare_booking fairness-report artifacts/responsible/fare_booking_fairness.json"
     "demand shap-summary artifacts/responsible/demand_shap_summary.png"
     "fare shap-summary artifacts/responsible/fare_shap_summary.png"
+    "fare_booking shap-summary artifacts/responsible/fare_booking_shap_summary.png"
     "demand model-card docs/model_cards/demand.md"
     "fare model-card docs/model_cards/fare.md"
+    "fare_booking model-card docs/model_cards/fare_booking.md"
 )
 
 entries=()

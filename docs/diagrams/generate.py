@@ -19,7 +19,12 @@ from diagrams.aws.analytics import Athena, GlueDataCatalog, KinesisDataFirehose
 from diagrams.aws.compute import ECR, ElasticContainerServiceService, Fargate
 from diagrams.aws.devtools import Codebuild
 from diagrams.aws.integration import EventbridgeScheduler, SimpleNotificationServiceSns
-from diagrams.aws.management import Cloudwatch, CloudwatchAlarm, CloudwatchLogs
+from diagrams.aws.management import (
+    Cloudwatch,
+    CloudwatchAlarm,
+    CloudwatchLogs,
+    SystemsManagerParameterStore,
+)
 from diagrams.aws.ml import SagemakerModel
 from diagrams.aws.network import ElbApplicationLoadBalancer
 from diagrams.aws.security import IdentityAndAccessManagementIamRole
@@ -63,11 +68,11 @@ def ml_lifecycle() -> None:
             registry = Mlflow("MLflow tracking\n+ model registry")
 
         with Cluster("Serving"):
-            api = Fastapi("FastAPI\nreal-time API")
+            api = Fastapi("FastAPI\nreal-time API\n3 models")
             batch = Python("batch forecast\n(predictions.db)")
 
         with Cluster("Monitoring, responsible AI, dashboard"):
-            drift = Python("drift detection\nPSI + KS")
+            drift = Python("drift + live accuracy\nPSI, KS, chi-square")
             rai = Python("SHAP + subgroup\nerror analysis")
             dashboard = Python("Streamlit\ndashboard")
 
@@ -101,13 +106,13 @@ def data_pipeline() -> None:
             demand_splits = Database("demand train, val, test")
 
         with Cluster("Fare branch (one row per trip)"):
-            fare_feats = Database("fare_features.parquet\ndistance, zones,\ntime of day")
+            fare_feats = Database("fare_features.parquet\ndistance, duration, zones,\ntime, airport flags")
             fare_splits = Database("fare train, val, test")
 
         raw >> Edge(label="validate + clean") >> clean
         zones >> Edge(style="dashed") >> clean
         clean >> Edge(style="dashed") >> summary
-        clean >> Edge(label="aggregate") >> hourly >> demand_feats >> Edge(label="80%, 10%, 10% by time") >> demand_splits
+        raw >> Edge(label="valid pickups\n3,007,511") >> hourly >> demand_feats >> Edge(label="80%, 10%, 10% by time") >> demand_splits
         clean >> fare_feats >> Edge(label="80%, 10%, 10% by time") >> fare_splits
 
 
@@ -130,18 +135,18 @@ def aws_architecture() -> None:
 
         with Cluster("Serving path (default VPC, ECS cluster)"):
             alb = ElbApplicationLoadBalancer("API ALB\nHTTP :80")
-            api = Fargate("API task\nFastAPI + models\n1 vCPU, 2 GB")
+            api = Fargate("API task\nFastAPI + 3 models\n1 vCPU, 2 GB")
             dash_alb = ElbApplicationLoadBalancer("Dashboard ALB\nHTTP :80")
             dash = ElasticContainerServiceService("Dashboard task\nStreamlit")
 
         with Cluster("Monitoring path"):
             logs = CloudwatchLogs("CloudWatch Logs\nprediction events")
             firehose = KinesisDataFirehose("Data Firehose")
-            capture = SimpleStorageServiceS3Bucket("S3 monitoring\ncaptured/ and\ndrift-reports/")
+            capture = SimpleStorageServiceS3Bucket("S3 monitoring\ncaptured/, actuals/,\nreports")
             scheduler = EventbridgeScheduler("EventBridge\nScheduler (weekly)")
-            sagemaker = SagemakerModel("SageMaker\nProcessing job\n(drift)")
+            sagemaker = SagemakerModel("SageMaker\nProcessing jobs\ndrift, live accuracy")
             metrics = Cloudwatch("CloudWatch metrics\n+ dashboard")
-            alarm = CloudwatchAlarm("Alarms\ndrift, API 5xx")
+            alarm = CloudwatchAlarm("Alarms\ndrift, accuracy,\nAPI 5xx")
             sns = SimpleNotificationServiceSns("SNS email\nalerts")
 
         with Cluster("Data lake"):
@@ -150,6 +155,7 @@ def aws_architecture() -> None:
             athena = Athena("Athena")
 
         iam = IdentityAndAccessManagementIamRole("IAM roles\n(one per service)")
+        ssm = SystemsManagerParameterStore("Parameter Store\nAPI key")
 
         github >> Edge(label="webhook") >> codebuild
         artifacts >> codebuild >> Edge(label="push image") >> ecr
@@ -161,11 +167,13 @@ def aws_architecture() -> None:
 
         api >> Edge(label="stdout JSON") >> logs >> Edge(label="subscription filter") >> firehose >> capture
         scheduler >> sagemaker
-        capture >> sagemaker >> Edge(label="drift_metrics.json") >> capture
+        capture >> sagemaker >> Edge(label="drift and\nperformance JSON") >> capture
         sagemaker >> metrics >> alarm >> sns
 
         lake >> glue >> athena
         iam >> Edge(style="dotted") >> api
+        ssm >> Edge(style="dotted", label="API key") >> api
+        ssm >> Edge(style="dotted") >> dash
 
 
 def release_flow() -> None:

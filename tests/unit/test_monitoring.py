@@ -187,3 +187,25 @@ def test_parse_double_gzip_cloudwatch_capture():
     assert frame.iloc[0]["trip_distance"] == 3.1
     assert frame.iloc[0]["prediction"] == 14.2
     assert frame.iloc[1]["prediction"] == 15.0
+
+
+def test_zone_ids_are_compared_as_categories():
+    rng = np.random.default_rng(7)
+    zones = rng.choice([132, 161, 230, 236, 237], size=3000, p=[0.3, 0.2, 0.2, 0.15, 0.15])
+    ref = pd.DataFrame({"PULocationID": zones})
+    same = pd.DataFrame({"PULocationID": rng.permutation(zones)[:1000]})
+    shifted = pd.DataFrame({"PULocationID": np.full(1000, 132)})
+    stable = compute_drift(ref, same).features[0]
+    moved = compute_drift(ref, shifted).features[0]
+    assert stable.kind == "categorical" and stable.test == "chi2"
+    assert not stable.drifted
+    assert moved.drifted and moved.pvalue < 0.01
+
+
+def test_prediction_drift_flags_shifted_outputs():
+    from src.monitoring.drift import compute_prediction_drift
+
+    rng = np.random.default_rng(8)
+    target = pd.Series(rng.normal(15, 5, 5000))
+    assert not compute_prediction_drift(target, pd.Series(rng.normal(15, 5, 800))).drifted
+    assert compute_prediction_drift(target, pd.Series(rng.normal(40, 5, 800))).drifted

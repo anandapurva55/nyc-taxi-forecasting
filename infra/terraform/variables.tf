@@ -83,10 +83,22 @@ variable "drift_schedule" {
   default     = "rate(7 days)"
 }
 
-variable "drift_problem" {
-  description = "Which model's feature distribution the scheduled drift job inspects (demand or fare)."
+variable "drift_problems" {
+  description = "Models whose input distributions the scheduled drift jobs inspect (one job each)."
+  type        = list(string)
+  default     = ["demand", "fare"]
+}
+
+variable "performance_schedule" {
+  description = "EventBridge Scheduler expression for the live demand-accuracy Processing job."
   type        = string
-  default     = "fare"
+  default     = "rate(7 days)"
+}
+
+variable "performance_actuals_key" {
+  description = "Key in the monitoring bucket of the realised hourly demand table the performance job compares predictions with."
+  type        = string
+  default     = "actuals/demand_hourly.parquet"
 }
 
 variable "drift_instance_type" {
@@ -176,3 +188,24 @@ variable "dashboard_task_memory" {
   type        = number
   default     = 1024
 }
+
+# --- API access controls ------------------------------------------------------
+variable "api_key" {
+  description = "Optional API key required in the X-API-Key header for prediction endpoints. Stored encrypted in SSM. Supply via TF_VAR_api_key; leave empty to disable."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "api_rate_limit_per_minute" {
+  description = "Requests per minute allowed per client IP on prediction endpoints (0 disables the limit)."
+  type        = number
+  default     = 0
+}
+
+variable "api_cors_allow_origins" {
+  description = "Browser origins allowed to call the API cross-origin (empty means none)."
+  type        = list(string)
+  default     = []
+}
+

@@ -31,6 +31,7 @@ PROBLEMS: dict[str, dict[str, Any]] = {
         "registry_key": "registry_demand",
         "registry_default": "taxi-demand-forecaster",
         "file_prefix": "demand",
+        "time_col": demand_features.TIME_COL,
     },
     "fare": {
         "target": fare_features.TARGET,
@@ -38,6 +39,17 @@ PROBLEMS: dict[str, dict[str, Any]] = {
         "registry_key": "registry_fare",
         "registry_default": "taxi-fare-predictor",
         "file_prefix": "fare",
+        "time_col": fare_features.TIME_COL,
+    },
+    # Same trips and target as "fare", without the trip duration, for quotes
+    # made before the trip when the duration is not yet known.
+    "fare_booking": {
+        "target": fare_features.TARGET,
+        "feature_columns": fare_features.booking_feature_columns,
+        "registry_key": "registry_fare_booking",
+        "registry_default": "taxi-fare-booking",
+        "file_prefix": "fare",
+        "time_col": fare_features.TIME_COL,
     },
 }
 
@@ -113,6 +125,30 @@ def load_split(config: Config, problem: str, split: str) -> tuple[pd.DataFrame, 
         )
     df = pd.read_parquet(path)
     return split_to_xy(df, problem)
+
+
+def load_split_frame(config: Config, problem: str, split: str) -> pd.DataFrame:
+    """Load a split with every column, including the time column."""
+    path = _split_path(config, PROBLEMS[problem]["file_prefix"], split)
+    if not path.exists():
+        raise FileNotFoundError(f"Missing split parquet: {path}. Run the pipeline first.")
+    return pd.read_parquet(path)
+
+
+def hour_blocks(config: Config, problem: str, split: str) -> np.ndarray:
+    """Hour of each row in a split, used as bootstrap blocks."""
+    times = load_split_frame(config, problem, split)[PROBLEMS[problem]["time_col"]]
+    return pd.to_datetime(times).dt.floor("h").to_numpy()
+
+
+def chronological_holdout(
+    X: pd.DataFrame, y: pd.Series, frac: float
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+    """Split time-ordered rows into an earlier fit part and a later holdout part."""
+    if not 0.0 < frac < 1.0:
+        raise ValueError("frac must be between 0 and 1")
+    cut = int(len(X) * (1.0 - frac))
+    return X.iloc[:cut], y.iloc[:cut], X.iloc[cut:], y.iloc[cut:]
 
 
 def load_splits(

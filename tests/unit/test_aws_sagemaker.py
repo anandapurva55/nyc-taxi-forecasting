@@ -39,7 +39,7 @@ def test_build_training_env_includes_s3_artifact_root():
 
 # --- training_job_arguments --------------------------------------------------
 def test_training_job_arguments_defaults():
-    assert training_job_arguments() == ["--problem", "both"]
+    assert training_job_arguments() == ["--problem", "all"]
 
 
 def test_training_job_arguments_full():

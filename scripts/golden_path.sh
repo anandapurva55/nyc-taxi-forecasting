@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Golden path: run the whole project from a clean checkout and verify every stage.
 #
-# Stages: environment, quality gate, data pipeline, training and registration,
-# batch inference, live API smoke test, responsible AI analysis, drift report.
+# Stages: environment, quality gate, data pipeline, real-data checks, training
+# and registration, evaluation against baselines, batch inference, live API smoke
+# test, responsible AI analysis, drift report.
 # Each stage writes its log to logs/golden_path/ and the run stops at the first
 # failure. A JSON summary is written to logs/golden_path/summary.json.
 #
@@ -64,7 +65,7 @@ require_file() {
 setup_env() {
     [[ -x "$PY" ]] || "$PYTHON_BIN" -m venv .venv
     "$PY" -m pip install --upgrade pip
-    "$PY" -m pip install -r requirements.txt
+    "$PY" -m pip install -r requirements.txt -c requirements.lock
     "$PY" --version
 }
 
@@ -99,13 +100,16 @@ stage 05_pipeline_outputs require_file \
     data/processed/pipeline_summary.json data/processed/demand_hourly.parquet \
     data/features/demand_train.parquet data/features/demand_val.parquet data/features/demand_test.parquet \
     data/features/fare_train.parquet data/features/fare_val.parquet data/features/fare_test.parquet
-stage 06_train_and_register "$PY" -m scripts.train_models --n-trials "$TRIALS"
-stage 07_batch_inference "$PY" -m scripts.batch_forecast --horizon 3
-stage 08_api_smoke_test serve_and_smoke_test
-stage 09_responsible_ai "$PY" -m scripts.responsible.run_analysis
-stage 10_drift_report "$PY" -m scripts.monitoring.demo_drift_report --problem all --mode drift
-stage 11_final_outputs require_file \
+stage 06_real_data_checks "$PY" -m pytest -q tests/realdata
+stage 07_train_and_register "$PY" -m scripts.train_models --n-trials "$TRIALS"
+stage 08_evaluation "$PY" -m scripts.evaluate_forecasts --quick
+stage 09_batch_inference "$PY" -m scripts.batch_forecast --horizon 3
+stage 10_api_smoke_test serve_and_smoke_test
+stage 11_responsible_ai "$PY" -m scripts.responsible.run_analysis
+stage 12_drift_report "$PY" -m scripts.monitoring.demo_drift_report --problem all --mode drift
+stage 13_final_outputs require_file \
     mlflow.db predictions.db docs/model_cards/demand.md docs/model_cards/fare.md \
+    config/performance_baseline.json artifacts/evaluation/evaluation.json \
     artifacts/responsible/demand_fairness.json artifacts/responsible/fare_fairness.json \
     artifacts/drift/demand_drift_metrics.json artifacts/drift/fare_drift_metrics.json
 

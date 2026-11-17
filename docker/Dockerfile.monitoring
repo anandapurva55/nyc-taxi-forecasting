@@ -17,10 +17,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt ./
+COPY requirements-serving.txt requirements.lock ./
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install -r requirements.txt "boto3>=1.34"
+    && /opt/venv/bin/pip install -r requirements-serving.txt -c requirements.lock "boto3>=1.34"
 
 FROM python:3.11-slim AS runtime
 

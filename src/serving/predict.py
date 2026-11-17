@@ -10,6 +10,7 @@ from __future__ import annotations
 import pandas as pd
 
 from src.config import Config, get_config
+from src.features import fare_features
 from src.serving import features
 
 
@@ -22,8 +23,10 @@ def _fare_row(
     pickup_datetime: pd.Timestamp,
     trip_duration_min: float | None,
     config: Config,
+    duration_lookup=None,
+    booking: bool = False,
 ) -> pd.DataFrame:
-    return features.build_fare_row(
+    row = features.build_fare_row(
         trip_distance=trip_distance,
         passenger_count=passenger_count,
         pu_location_id=pu_location_id,
@@ -31,7 +34,10 @@ def _fare_row(
         pickup_datetime=pickup_datetime,
         trip_duration_min=trip_duration_min,
         config=config,
+        duration_lookup=duration_lookup,
     )
+    # The booking-time model is trained without the trip duration.
+    return row.drop(columns=list(fare_features.BOOKING_EXCLUDED)) if booking else row
 
 
 def predict_fare(
@@ -44,8 +50,13 @@ def predict_fare(
     pickup_datetime: pd.Timestamp,
     trip_duration_min: float | None = None,
     config: Config | None = None,
+    duration_lookup=None,
+    booking: bool = False,
 ) -> float:
-    """Predict the fare amount for a single trip."""
+    """Predict the fare amount for a single trip.
+
+    ``booking=True`` builds the row for the booking-time model (no trip duration).
+    """
     config = config or get_config()
     X = _fare_row(
         trip_distance=trip_distance,
@@ -55,6 +66,8 @@ def predict_fare(
         pickup_datetime=pickup_datetime,
         trip_duration_min=trip_duration_min,
         config=config,
+        duration_lookup=duration_lookup,
+        booking=booking,
     )
     return float(model.predict(X)[0])
 
@@ -70,6 +83,8 @@ def explain_fare(
     trip_duration_min: float | None = None,
     config: Config | None = None,
     explainer=None,
+    duration_lookup=None,
+    booking: bool = False,
 ):
     """SHAP explanation for a single fare prediction (same row the model sees)."""
     from src.responsible.explain import explain_instance
@@ -83,6 +98,8 @@ def explain_fare(
         pickup_datetime=pickup_datetime,
         trip_duration_min=trip_duration_min,
         config=config,
+        duration_lookup=duration_lookup,
+        booking=booking,
     )
     return explain_instance(model, X, explainer=explainer)
 

@@ -69,3 +69,6 @@ logs/
 
 # Raw AWS console screenshots (contain account details); redacted copies go to docs/images/console/
 console-shots/
+
+# Generated at image build time
+config/build_info.json

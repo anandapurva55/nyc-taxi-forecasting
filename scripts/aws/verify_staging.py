@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import time
 from dataclasses import asdict, dataclass
@@ -73,14 +74,16 @@ def run_checks(
 ) -> list[CheckResult]:
     """Exercise the public API contract and optional dashboard landing page."""
     http = session or requests.Session()
+    if os.environ.get("API_KEY"):
+        http.headers["X-API-Key"] = os.environ["API_KEY"]
     fare = {
         "trip_distance": 3.4,
         "pu_location_id": 132,
         "do_location_id": 230,
         "passenger_count": 1,
-        "pickup_datetime": "2024-01-15T18:30:00",
+        "pickup_datetime": "2024-02-15T18:30:00",
     }
-    demand = {"zone": 132, "target_hour": "2024-01-31T20:00:00"}
+    demand = {"zone": 132, "target_hour": "2024-02-29T20:00:00"}
     checks = [
         ("health", "GET", "/health", 200, None),
         ("fare prediction", "POST", "/predict/fare", 200, fare),

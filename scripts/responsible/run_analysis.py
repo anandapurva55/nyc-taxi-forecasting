@@ -95,8 +95,10 @@ def analyse_problem(problem: str, config: Config, zone_lookup: pd.DataFrame) -> 
     }
     (ARTIFACTS_DIR / f"{problem}_fairness.json").write_text(json.dumps(fairness_json, indent=2))
 
+    served = registry.resolve_version(problem, config)
     card = render_model_card(
         name=registry_model_name(problem, config),
+        version=f"{served['version']} (@{served['reference']})" if served else "",
         problem=problem,
         algorithm=type(model).__name__,
         target=PROBLEMS[problem]["target"],

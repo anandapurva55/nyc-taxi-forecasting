@@ -110,7 +110,8 @@ def test_model_service_caches_demand_prediction_by_zone_and_hour(demand_history,
 
     monkeypatch.setattr(predict, "predict_demand", fake_predict)
     service = ModelService(None, None, demand_history)
-    target = pd.Timestamp("2024-01-15T18:00:00")
+    # Inside the history and one hour past it: both are served by the model.
+    target = service.latest_history_hour()
 
     assert service.predict_demand(zone=1, target_hour=target) == 12.5
     assert service.predict_demand(zone=1, target_hour=target + pd.Timedelta(minutes=30)) == 12.5
@@ -278,3 +279,24 @@ def test_write_forecasts_to_sqlite(demand_model, demand_history, tmp_path):
     with sqlite3.connect(db_path) as conn:
         rows = conn.execute("SELECT COUNT(*) FROM demand_forecasts").fetchone()[0]
     assert rows == len(result)
+
+
+def test_registry_uri_uses_alias_for_named_reference():
+    from types import SimpleNamespace as NS
+
+    config = NS(serving={"model_stage": "champion"}, models={"registry_fare": "fare-v2"})
+    assert registry.model_uri("fare", config) == "models:/fare-v2@champion"
+    config.serving["model_stage"] = "latest"
+    assert registry.model_uri("fare", config) == "models:/fare-v2/latest"
+
+
+def test_rate_limiter_sliding_window():
+    from src.serving.security import RateLimiter
+
+    limiter = RateLimiter()
+    assert limiter.allow("a", 2, now=0.0)
+    assert limiter.allow("a", 2, now=1.0)
+    assert not limiter.allow("a", 2, now=2.0)
+    assert limiter.allow("b", 2, now=2.0)
+    assert limiter.allow("a", 2, now=61.0)
+    assert limiter.allow("a", 0, now=61.5)

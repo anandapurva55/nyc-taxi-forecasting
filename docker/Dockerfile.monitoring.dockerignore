@@ -1,7 +1,8 @@
 # Build context for docker/Dockerfile.monitoring: code, config and the
 # training splits used as the drift reference. Nothing else.
 **
-!requirements.txt
+!requirements-serving.txt
+!requirements.lock
 !src/**
 !config/**
 !scripts/**

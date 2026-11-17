@@ -1,0 +1,39 @@
+# Runtime dependencies of the API and batch inference, and nothing else.
+# The production image installs only this file. requirements.txt includes it and
+# adds training, notebook and test tooling on top.
+
+# Core data stack
+pandas==2.2.2
+numpy==1.26.4
+pyarrow==15.0.2
+python-dateutil==2.9.0.post0
+holidays==0.53
+
+# Models (needed to load the registered estimators)
+scikit-learn==1.5.0
+xgboost==2.0.3
+lightgbm==4.3.0
+
+# Model registry and explanations
+mlflow==2.14.1
+# mlflow 2.14 imports pool classes that SQLAlchemy 2.1 removed.
+sqlalchemy<2.1
+shap==0.45.1
+matplotlib==3.9.0
+
+# Config / utilities
+pyyaml==6.0.1
+python-dotenv==1.0.1
+requests==2.32.3
+
+# Serving
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# Observability - Prometheus /metrics for the API
+prometheus-fastapi-instrumentator==7.0.0
+
+# Build/runtime shim: provides pkg_resources for transitive deps (e.g. mlflow)
+# on Python images that no longer bundle setuptools by default. Pin below 81
+# because setuptools 81 removed the pkg_resources module.
+setuptools<81

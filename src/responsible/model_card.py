@@ -24,15 +24,31 @@ def _fairness_section(reports: Sequence[FairnessReport]) -> str:
         return "_No subgroup analysis available._"
     parts: list[str] = []
     for rep in reports:
+        if rep.coverage_gap:
+            parts.append(
+                f"### By {rep.dimension}\n\n"
+                "Coverage gap: fewer than two groups with enough volume appear in the "
+                "evaluation data, so this dimension could not be audited."
+            )
+            continue
         flag = "⚠️ **flagged**" if rep.flagged else "ok"
+        low = rep.low_volume_groups
+        low_note = (
+            f" Not compared (mean actual below {rep.min_mean_actual:g}, too small for a stable "
+            f"WAPE): {', '.join(f'`{g}`' for g in low)}."
+            if low
+            else ""
+        )
         parts.append(
             f"### By {rep.dimension}\n\n"
-            f"Disparity ratio (worst/best RMSE): **{rep.disparity:.2f}** "
-            f"(threshold {rep.threshold}) - {flag}. "
-            f"Worst: `{rep.worst_group}`, best: `{rep.best_group}`.\n\n"
-            "| Group | n | RMSE | MAE | MAPE |\n|-------|---|------|-----|------|\n"
+            f"Disparity ratio (worst/best WAPE): **{rep.disparity:.2f}** "
+            f"(threshold {rep.threshold}) - {flag}. RMSE ratio for context: "
+            f"{rep.rmse_ratio:.2f}. Worst: `{rep.worst_group}`, best: `{rep.best_group}`.{low_note}\n\n"
+            "| Group | n | Mean actual | WAPE | RMSE | MAE |\n"
+            "|-------|---|-------------|------|------|-----|\n"
             + "\n".join(
-                f"| {s.group} | {s.n} | {s.rmse:.3f} | {s.mae:.3f} | {s.mape:.2f} |"
+                f"| {s.group} | {s.n} | {s.mean_actual:.2f} | {s.wape:.3f} "
+                f"| {s.rmse:.3f} | {s.mae:.3f} |"
                 for s in rep.subgroups
             )
         )

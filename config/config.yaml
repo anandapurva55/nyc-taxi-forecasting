@@ -36,12 +36,19 @@ models:
   random_state: 42
   # Number of Optuna trials per estimator (override via CLI for fast runs / CI).
   n_trials: 25
+  # Optuna tunes on this fraction taken from the END of the training split, so the
+  # validation split is only used to choose between candidates.
+  tuning_holdout_frac: 0.15
+  # Block-bootstrap resamples for confidence intervals on test metrics.
+  bootstrap_samples: 500
   # Metric used to select the best model on the validation split.
   selection_metric: "rmse"
   estimators: ["xgboost", "lightgbm"]
   # MLflow Model Registry names for the best model per problem.
   registry_demand: "taxi-demand-forecaster"
   registry_fare: "taxi-fare-predictor"
+  # Fare model without trip duration, used when a quote is requested before the trip.
+  registry_fare_booking: "taxi-fare-booking"
   # Directory for non-MLflow artifacts (SHAP plots, model cards).
   artifacts_dir: "artifacts"
 
@@ -51,10 +58,15 @@ serving:
   demand_history_path: "data/processed/demand_hourly.parquet"
   # SQLite database for batch demand forecasts.
   batch_db_path: "predictions.db"
-  # Registry stage/version reference to load (e.g. a version number or "latest").
-  model_stage: "latest"
+  # Registry reference to load: an alias set by training ("champion"), a version
+  # number, or "latest". The alias pins serving to an approved version.
+  model_stage: "champion"
   # Hours ahead for the batch demand forecast.
   batch_horizon_hours: 24
+  # Hours ahead served by the demand model. Beyond this, forecasts use the count
+  # at the same hour last week, which was more accurate in the 57-origin backtest
+  # (artifacts/evaluation/evaluation.json).
+  model_horizon_hours: 2
 
 mlflow:
   # SQLite backend enables the MLflow Model Registry (file store does not).

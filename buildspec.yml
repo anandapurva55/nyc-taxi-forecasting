@@ -1,8 +1,12 @@
 # AWS CodeBuild CI/CD for the taxi-forecasting API.
 #
 # Runs on every push/PR (webhook). It always lints + tests. On a push to the
-# default branch it additionally builds the SELF-CONTAINED image and deploys:
+# default branch (exact match) it additionally builds the SELF-CONTAINED image and
+# deploys. A manual start deploys only when DEPLOY_MANUAL=true is passed:
 #   test -> fetch baked artifacts from S3 -> build image -> push to ECR -> roll ECS.
+# Each image is tagged with its commit (git-<sha>) and carries build_info.json.
+# A build started from a source archive instead of GitHub passes SOURCE_LABEL
+# (for example prerelease-20261117), which is used as the tag and recorded commit.
 #
 # The image bakes in mlruns/, mlflow.db and the demand-history parquet, which are
 # gitignored (absent from the checkout). CodeBuild pulls them from
@@ -20,7 +24,7 @@ phases:
       python: 3.11
     commands:
       - python -m pip install --upgrade pip
-      - pip install -r requirements.txt
+      - pip install -r requirements.txt -c requirements.lock
 
   pre_build:
     commands:
@@ -31,11 +35,14 @@ phases:
       # Decide whether this run should also build + deploy (push to DEPLOY_BRANCH).
       - |
         DEPLOY="false"
-        if echo "$CODEBUILD_WEBHOOK_HEAD_REF" | grep -q "refs/heads/${DEPLOY_BRANCH}"; then
+        # Exact match: a push to "main-hotfix" must not deploy when DEPLOY_BRANCH is "main".
+        if [ "$CODEBUILD_WEBHOOK_EVENT" = "PUSH" ] && [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "refs/heads/${DEPLOY_BRANCH}" ]; then
           DEPLOY="true"
         fi
-        # Manual CodeBuild starts (no webhook ref) also deploy by default.
-        if [ -z "$CODEBUILD_WEBHOOK_EVENT" ]; then DEPLOY="true"; fi
+        # Manual starts deploy only when explicitly requested with DEPLOY_MANUAL=true.
+        if [ -z "$CODEBUILD_WEBHOOK_EVENT" ] && [ "${DEPLOY_MANUAL:-false}" = "true" ]; then
+          DEPLOY="true"
+        fi
         echo "DEPLOY=$DEPLOY" > deploy.env
         echo "Deploy this run: $DEPLOY"
 
@@ -54,19 +61,29 @@ phases:
       - aws s3 cp "s3://$ARTIFACTS_BUCKET/demand_hourly.parquet" ./data/processed/demand_hourly.parquet --only-show-errors
       - echo "Generating container-portable MLflow DB"
       - python scripts/make_mlflow_portable.py --src mlflow.db --dest mlflow.container.db --new-base "file:///app/mlruns"
+      - echo "Recording build provenance (commit, model versions, input hashes)"
+      - SOURCE_ID="${SOURCE_LABEL:-$CODEBUILD_RESOLVED_SOURCE_VERSION}"
+      - python scripts/write_build_info.py --commit "$SOURCE_ID"
       - echo "Logging in to ECR"
-      - REGISTRY="${ECR_REPOSITORY_URL%%/*}"
+      - REGISTRY="${ECR_REPOSITORY_URL}"
+      - REGISTRY="${REGISTRY%%/*}"
       - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
-      - IMAGE="${ECR_REPOSITORY_URL}:${IMAGE_TAG}"
+      # Every image is tagged with its commit, so any release can be rolled back exactly.
+      - |
+        if [ -n "$SOURCE_LABEL" ]; then
+          COMMIT_TAG="$SOURCE_LABEL"
+        else
+          COMMIT_TAG="git-$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c1-7)"
+        fi
+      - IMAGE="${ECR_REPOSITORY_URL}:${COMMIT_TAG}"
       - echo "Building and pushing $IMAGE"
       - docker build -f docker/Dockerfile -t "$IMAGE" .
       - docker push "$IMAGE"
       - |
-        if [ "$IMAGE_TAG" != "latest" ]; then
-          LATEST="${ECR_REPOSITORY_URL}:latest"
-          echo "Publishing the same image as $LATEST for the current ECS task definition"
-          docker tag "$IMAGE" "$LATEST"
-          docker push "$LATEST"
+        if [ "$IMAGE_TAG" != "$COMMIT_TAG" ]; then
+          echo "Also publishing as ${ECR_REPOSITORY_URL}:${IMAGE_TAG} for the current ECS task definition"
+          docker tag "$IMAGE" "${ECR_REPOSITORY_URL}:${IMAGE_TAG}"
+          docker push "${ECR_REPOSITORY_URL}:${IMAGE_TAG}"
         fi
 
   post_build:

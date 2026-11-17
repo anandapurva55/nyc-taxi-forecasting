@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -46,6 +47,8 @@ def _session() -> requests.Session:
     """One keep-alive session per worker thread, like a real API client."""
     if not hasattr(_local, "session"):
         _local.session = requests.Session()
+        if os.environ.get("API_KEY"):
+            _local.session.headers["X-API-Key"] = os.environ["API_KEY"]
     return _local.session
 
 
@@ -147,7 +150,7 @@ def main() -> int:
                 "pu_location_id": 132,
                 "do_location_id": 230,
                 "passenger_count": 1,
-                "pickup_datetime": "2024-01-15T18:30:00",
+                "pickup_datetime": "2024-02-15T18:30:00",
             },
             args.prediction_p95_target_ms,
         ),
@@ -155,7 +158,7 @@ def main() -> int:
             "demand prediction",
             "POST",
             f"{api_url}/predict/demand",
-            {"zone": 132, "target_hour": "2024-01-31T20:00:00"},
+            {"zone": 132, "target_hour": "2024-02-29T20:00:00"},
             args.prediction_p95_target_ms,
         ),
     ]

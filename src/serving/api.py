@@ -4,7 +4,12 @@ Endpoints:
 - ``GET  /health``          - liveness + model/state readiness.
 - ``POST /predict/fare``    - single-trip fare prediction.
 - ``POST /predict/demand``  - single ``(zone, hour)`` pickup-count prediction.
-- ``POST /forecast/demand`` - recursive multi-hour pickup forecast per zone.
+- ``POST /forecast/demand`` - multi-hour pickup forecast per zone (model, then same hour last week).
+- ``POST /explain/fare`` and ``/explain/demand`` - SHAP contributions.
+- ``GET  /version``         - commit, model versions and input hashes of this build.
+
+Prediction, forecast and explanation endpoints are protected by an optional API
+key and per-client rate limit (see ``security``).
 
 Each request is tagged with an ``X-Request-ID`` (generated if absent) for tracing,
 and domain errors (e.g. unknown zone, insufficient history) are returned as 400s.
@@ -18,12 +23,15 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from src.config import PROJECT_ROOT, get_config
+from src.features import zones
 from src.serving import batch as batch_module
 from src.serving import service as service_module
 from src.serving.schemas import (
@@ -37,7 +45,9 @@ from src.serving.schemas import (
     ForecastRequest,
     ForecastResponse,
     HealthResponse,
+    VersionResponse,
 )
+from src.serving.security import configure_cors, enforce_rate_limit, require_api_key
 from src.serving.service import ModelService, get_service
 
 logger = logging.getLogger(__name__)
@@ -54,11 +64,18 @@ if not capture_logger.handlers:
     capture_logger.addHandler(capture_handler)
 
 
-def _model_stage(svc: ModelService) -> str:
+BUILD_INFO_PATH = PROJECT_ROOT / "config" / "build_info.json"
+
+# Applied to every endpoint that runs a model.
+PROTECTED = [Depends(require_api_key), Depends(enforce_rate_limit)]
+
+
+def _model_version(svc: ModelService, problem: str) -> str:
+    """Exact served model version, falling back to the configured reference."""
     try:
-        return str(svc.config.serving.get("model_stage", "latest"))
+        return svc.model_version(problem)
     except Exception:  # pragma: no cover - defensive
-        return "unknown"
+        return str(svc.config.serving.get("model_stage", "unknown"))
 
 
 def _capture_prediction(
@@ -101,6 +118,7 @@ app = FastAPI(
 # Prometheus /metrics endpoint (monitoring): request count,
 # latency histograms, and in-progress gauges, exposed for scraping.
 Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+configure_cors(app)
 
 
 @app.middleware("http")
@@ -154,12 +172,31 @@ def health() -> HealthResponse:
         status="ok",
         demand_model_loaded=svc.demand_model is not None,
         fare_model_loaded=svc.fare_model is not None,
+        fare_booking_model_loaded=svc.fare_booking_model is not None,
         history_hours=history_hours,
         zones=len(svc.known_zones()),
     )
 
 
-@app.post("/predict/fare", response_model=FareResponse)
+@app.get("/version", response_model=VersionResponse)
+def version() -> VersionResponse:
+    """Which code, models and data this service is running."""
+    info: dict = {}
+    if Path(BUILD_INFO_PATH).exists():
+        info = json.loads(Path(BUILD_INFO_PATH).read_text())
+    svc = service_module._service
+    served = dict(svc.model_versions) if svc is not None else {}
+    return VersionResponse(
+        git_commit=info.get("git_commit", "unknown"),
+        built_at=info.get("built_at"),
+        models=served or {m["name"]: m for m in info.get("models", [])},
+        inputs=info.get("inputs", {}),
+        fare_without_duration=svc.fare_without_duration() if svc is not None else "unknown",
+        demand_model_horizon_hours=batch_module.model_horizon(svc.config if svc else get_config()),
+    )
+
+
+@app.post("/predict/fare", response_model=FareResponse, dependencies=PROTECTED)
 def predict_fare(
     payload: FareRequest,
     request: Request,
@@ -173,10 +210,11 @@ def predict_fare(
         pickup_datetime=payload.pickup_datetime,
         trip_duration_min=payload.trip_duration_min,
     )
+    fare_problem = svc.fare_problem(payload.trip_duration_min)
     _capture_prediction(
         request_id=_request_id(request),
         problem="fare",
-        model_version=_model_stage(svc),
+        model_version=_model_version(svc, fare_problem),
         features={
             "trip_distance": payload.trip_distance,
             "passenger_count": payload.passenger_count,
@@ -186,14 +224,23 @@ def predict_fare(
         },
         prediction=round(predicted, 2),
     )
+    notes = []
+    if zones.has_unknown_zone(payload.pu_location_id, payload.do_location_id):
+        notes.append(
+            "Pickup or drop-off zone is unknown (264 or 265); these trips have the "
+            "largest fare errors in the subgroup audit."
+        )
     return FareResponse(
         predicted_fare=round(predicted, 2),
-        duration_estimated=payload.trip_duration_min is None,
+        model=_model_version(svc, fare_problem),
+        duration_estimated=payload.trip_duration_min is None and fare_problem == "fare",
+        low_confidence=bool(notes),
+        notes=notes,
         request_id=_request_id(request),
     )
 
 
-@app.post("/predict/demand", response_model=DemandResponse)
+@app.post("/predict/demand", response_model=DemandResponse, dependencies=PROTECTED)
 def predict_demand(
     payload: DemandRequest,
     request: Request,
@@ -208,12 +255,17 @@ def predict_demand(
         zone=payload.zone, target_hour=pd.Timestamp(payload.target_hour)
     )
     target_ts = pd.Timestamp(payload.target_hour)
+    method = svc.demand_method(target_ts)
     _capture_prediction(
         request_id=_request_id(request),
         problem="demand",
-        model_version=_model_stage(svc),
+        model_version=_model_version(svc, "demand"),
         features={
             "zone": payload.zone,
+            # The performance job scores only model-served predictions against the model baseline.
+            "method": method,
+            # target_hour lets the performance job join predictions to actual counts.
+            "target_hour": target_ts.floor("h").isoformat(),
             "hour_of_day": int(target_ts.hour),
             "day_of_week": int(target_ts.dayofweek),
         },
@@ -223,20 +275,21 @@ def predict_demand(
         zone=payload.zone,
         target_hour=payload.target_hour,
         predicted_pickups=round(predicted, 2),
+        method=method,
         request_id=_request_id(request),
     )
 
 
-@app.post("/forecast/demand", response_model=ForecastResponse)
+@app.post("/forecast/demand", response_model=ForecastResponse, dependencies=PROTECTED)
 def forecast_demand(
     payload: ForecastRequest,
     request: Request,
     svc: ModelService = Depends(get_service),
 ) -> ForecastResponse:
-    """Recursive multi-hour pickup forecast for one or more zones.
+    """Multi-hour pickup forecast for one or more zones.
 
-    Wraps the batch forecaster so the dashboard can render time-series and zone
-    heatmaps without replicating the recursive lag logic client-side.
+    Wraps the batch forecaster, which uses the model for the first
+    ``serving.model_horizon_hours`` and the same hour last week after that.
     """
     zones = payload.zones
     if zones is not None:
@@ -257,14 +310,16 @@ def forecast_demand(
             zone=int(row.PULocationID),
             pickup_hour=pd.Timestamp(row.pickup_hour).to_pydatetime(),
             predicted_pickups=round(float(row.predicted_pickups), 2),
+            method=row.method,
         )
         for row in forecasts.itertuples(index=False)
     ]
     return ForecastResponse(
         horizon_hours=payload.horizon_hours,
+        model_horizon_hours=batch_module.model_horizon(svc.config),
         zones=int(forecasts["PULocationID"].nunique()) if not forecasts.empty else 0,
         points=points,
-        model_reference=_model_stage(svc),
+        model_reference=_model_version(svc, "demand"),
         request_id=_request_id(request),
     )
 
@@ -285,7 +340,7 @@ def _explain_response(problem: str, explanation, request: Request) -> ExplainRes
     )
 
 
-@app.post("/explain/fare", response_model=ExplainResponse)
+@app.post("/explain/fare", response_model=ExplainResponse, dependencies=PROTECTED)
 def explain_fare(
     payload: FareRequest,
     request: Request,
@@ -302,7 +357,7 @@ def explain_fare(
     return _explain_response("fare", explanation, request)
 
 
-@app.post("/explain/demand", response_model=ExplainResponse)
+@app.post("/explain/demand", response_model=ExplainResponse, dependencies=PROTECTED)
 def explain_demand(
     payload: DemandRequest,
     request: Request,

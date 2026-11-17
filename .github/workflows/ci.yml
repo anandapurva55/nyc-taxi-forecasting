@@ -1,0 +1,49 @@
+# Public quality gate: runs on every push and pull request and reports the
+# result on GitHub. Releases are built and deployed by AWS CodeBuild
+# (buildspec.yml), which repeats the lint and test step as a final gate before
+# any image reaches ECR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-serving.txt
+            requirements.lock
+      - name: Install dependencies (versions pinned by the lockfile)
+        run: pip install -r requirements.txt -c requirements.lock
+      - name: Ruff
+        run: ruff check .
+      - name: Pytest with coverage gate
+        run: pytest --cov=src --cov-report=term-missing
+
+  terraform:
+    name: Terraform format and validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: Format
+        run: terraform -chdir=infra/terraform fmt -check -recursive
+      - name: Validate
+        run: |
+          terraform -chdir=infra/terraform init -backend=false -input=false
+          terraform -chdir=infra/terraform validate

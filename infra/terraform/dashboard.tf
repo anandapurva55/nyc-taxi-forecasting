@@ -35,11 +35,11 @@ resource "aws_ecr_lifecycle_policy" "dashboard" {
     rules = [
       {
         rulePriority = 1
-        description  = "Keep last 5 images"
+        description  = "Keep the last 20 images so any recent release can be rolled back"
         selection = {
           tagStatus   = "any"
           countType   = "imageCountMoreThan"
-          countNumber = 5
+          countNumber = 20
         }
         action = { type = "expire" }
       }
@@ -174,6 +174,10 @@ resource "aws_ecs_task_definition" "dashboard" {
           name  = "PYTHONFAULTHANDLER"
           value = "1"
         }
+      ]
+      # The dashboard sends the API key with every call when one is configured.
+      secrets = var.api_key == "" ? [] : [
+        { name = "API_KEY", valueFrom = aws_ssm_parameter.api_key[0].arn },
       ]
       logConfiguration = {
         logDriver = "awslogs"

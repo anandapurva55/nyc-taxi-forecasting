@@ -13,12 +13,13 @@ import pandas as pd
 
 from src.config import Config, get_config
 from src.features import demand_features, fare_features
+from src.features.duration import DurationLookup
 
 logger = logging.getLogger(__name__)
 
-# Fallback trip duration estimate when the caller does not supply one.
-# (Booking-time callers usually don't know the duration; the fare model was
-# trained with it, so we approximate from distance.)
+# Fallback trip duration estimate when the caller does not supply one and no
+# learned lookup is available. Booking-time callers usually don't know the
+# duration; the fare model was trained with it, so it must be estimated.
 DEFAULT_MIN_PER_MILE = 3.0
 MIN_TRIP_DURATION_MIN = 1.0
 
@@ -74,10 +75,21 @@ def build_demand_row(
     return row[cols].reset_index(drop=True)
 
 
-def estimate_duration(trip_distance: float, trip_duration_min: float | None) -> float:
-    """Return a usable trip duration, estimating from distance when missing."""
+def estimate_duration(
+    trip_distance: float,
+    trip_duration_min: float | None,
+    hour: int | None = None,
+    lookup: DurationLookup | None = None,
+) -> float:
+    """Return a usable trip duration, estimating it when the caller omits it.
+
+    Uses the lookup learned from training data (median minutes per mile by hour
+    and trip length) when available, otherwise a fixed minutes per mile.
+    """
     if trip_duration_min is not None:
         return float(trip_duration_min)
+    if lookup is not None and hour is not None:
+        return lookup.estimate(trip_distance, hour)
     return max(MIN_TRIP_DURATION_MIN, float(trip_distance) * DEFAULT_MIN_PER_MILE)
 
 
@@ -90,10 +102,13 @@ def build_fare_row(
     pickup_datetime: pd.Timestamp,
     trip_duration_min: float | None = None,
     config: Config | None = None,
+    duration_lookup: DurationLookup | None = None,
 ) -> pd.DataFrame:
-    """Build the 14-column fare feature row for a single trip request."""
+    """Build the fare feature row for a single trip request."""
     config = config or get_config()
-    duration = estimate_duration(trip_distance, trip_duration_min)
+    duration = estimate_duration(
+        trip_distance, trip_duration_min, pd.Timestamp(pickup_datetime).hour, duration_lookup
+    )
 
     raw = pd.DataFrame(
         {

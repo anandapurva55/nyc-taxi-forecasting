@@ -1,13 +1,13 @@
 # Model Card - taxi-demand-forecaster
 
-_Generated: 2026-10-25 13:17 UTC_
+_Generated: 2026-11-17 09:06 UTC_
 
 ## Model details
 
 - **Problem:** demand
 - **Algorithm:** XGBRegressor
 - **Target:** `pickup_count`
-- **Registry version:** n/a
+- **Registry version:** 2 (@champion)
 
 ## Intended use
 
@@ -17,77 +17,69 @@ Operational forecasting of pickup_count to support fleet positioning and rider f
 
 | Metric | Value |
 |--------|-------|
-| rmse | 9.3607 |
-| mae | 2.8675 |
-| mape | 42.3865 |
-| r2 | 0.9723 |
+| rmse | 11.3641 |
+| mae | 3.4865 |
+| mape | 43.1672 |
+| r2 | 0.9679 |
 
 ## Evaluation - subgroup fairness
 
 ### By borough
 
-Disparity ratio (worst/best RMSE): **351.78** (threshold 1.5) - ⚠️ **flagged**. Worst: `Manhattan`, best: `Staten Island`.
+Disparity ratio (worst/best WAPE): **1.80** (threshold 1.5) - ⚠️ **flagged**. RMSE ratio for context: 5.66. Worst: `Unknown`, best: `Manhattan`. Not compared (mean actual below 1, too small for a stable WAPE): `Staten Island`, `Bronx`, `EWR`, `Brooklyn`.
 
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| Manhattan | 3485 | 17.130 | 8.896 | 31.99 |
-| Queens | 3645 | 6.178 | 1.271 | 53.48 |
-| Unknown | 104 | 3.655 | 2.218 | 36.37 |
-| Brooklyn | 3221 | 0.850 | 0.514 | 55.71 |
-| Bronx | 2272 | 0.468 | 0.272 | 62.82 |
-| EWR | 53 | 0.234 | 0.116 | 92.14 |
-| Staten Island | 526 | 0.049 | 0.022 | 91.86 |
+| Group | n | Mean actual | WAPE | RMSE | MAE |
+|-------|---|-------------|------|------|-----|
+| Staten Island | 634 | 0.00 | 32.102 | 0.126 | 0.101 |
+| Bronx | 2268 | 0.28 | 1.286 | 0.586 | 0.363 |
+| EWR | 53 | 0.43 | 1.201 | 0.753 | 0.521 |
+| Brooklyn | 3224 | 0.81 | 0.851 | 1.108 | 0.687 |
+| Unknown | 106 | 9.39 | 0.273 | 3.747 | 2.566 |
+| Queens | 3647 | 6.23 | 0.230 | 6.599 | 1.432 |
+| Manhattan | 3480 | 72.37 | 0.151 | 21.220 | 10.959 |
 
 ### By time_of_day
 
-Disparity ratio (worst/best RMSE): **4.56** (threshold 1.5) - ⚠️ **flagged**. Worst: `evening`, best: `overnight`.
+Disparity ratio (worst/best WAPE): **3.05** (threshold 1.5) - ⚠️ **flagged**. RMSE ratio for context: 5.41. Worst: `overnight`, best: `afternoon`.
 
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| evening | 4234 | 13.001 | 4.124 | 39.23 |
-| afternoon | 3024 | 9.648 | 3.281 | 38.78 |
-| morning | 3024 | 6.904 | 2.683 | 41.15 |
-| overnight | 3024 | 2.854 | 0.880 | 56.44 |
+| Group | n | Mean actual | WAPE | RMSE | MAE |
+|-------|---|-------------|------|------|-----|
+| overnight | 3048 | 2.63 | 0.391 | 3.096 | 1.028 |
+| evening | 4268 | 29.75 | 0.182 | 16.740 | 5.406 |
+| morning | 3048 | 19.50 | 0.164 | 7.681 | 3.193 |
+| afternoon | 3048 | 27.70 | 0.128 | 10.358 | 3.551 |
 
 ### By day_type
 
-Disparity ratio (worst/best RMSE): **1.00** (threshold 1.5) - ok. Worst: `weekday`, best: `weekday`.
-
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| weekday | 13306 | 9.361 | 2.868 | 42.39 |
+Coverage gap: fewer than two groups with enough volume appear in the evaluation data, so this dimension could not be audited.
 
 ### By holiday
 
-Disparity ratio (worst/best RMSE): **1.00** (threshold 1.5) - ok. Worst: `non-holiday`, best: `non-holiday`.
-
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| non-holiday | 13306 | 9.361 | 2.868 | 42.39 |
+Coverage gap: fewer than two groups with enough volume appear in the evaluation data, so this dimension could not be audited.
 
 ### By airport
 
-Disparity ratio (worst/best RMSE): **3.96** (threshold 1.5) - ⚠️ **flagged**. Worst: `airport`, best: `non-airport`.
+Disparity ratio (worst/best WAPE): **1.17** (threshold 1.5) - ok. RMSE ratio for context: 3.43. Worst: `non-airport`, best: `airport`.
 
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| airport | 106 | 35.098 | 26.218 | 27.93 |
-| non-airport | 13200 | 8.856 | 2.680 | 42.67 |
+| Group | n | Mean actual | WAPE | RMSE | MAE |
+|-------|---|-------------|------|------|-----|
+| non-airport | 13307 | 19.49 | 0.169 | 10.913 | 3.302 |
+| airport | 105 | 186.04 | 0.145 | 37.452 | 26.917 |
 
 ## Top features (SHAP)
 
 | Feature | Mean |SHAP| |
 |---------|-----------|
-| lag_168 | 13.3060 |
-| lag_1 | 5.9565 |
-| lag_24 | 4.8771 |
-| rolling_mean_3 | 2.5716 |
-| lag_3 | 0.6576 |
-| hour_cos | 0.5167 |
-| rolling_mean_168 | 0.4461 |
-| hour | 0.4119 |
-| rolling_std_168 | 0.3354 |
-| rolling_std_3 | 0.3305 |
+| lag_168 | 13.3500 |
+| lag_1 | 11.9386 |
+| lag_24 | 3.3996 |
+| rolling_mean_3 | 2.1767 |
+| lag_3 | 0.8099 |
+| hour_cos | 0.7388 |
+| lag_2 | 0.4341 |
+| hour | 0.3924 |
+| rolling_std_3 | 0.3200 |
+| rolling_std_168 | 0.3061 |
 
 ## Limitations
 

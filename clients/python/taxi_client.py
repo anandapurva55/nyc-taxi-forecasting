@@ -12,12 +12,13 @@ Example
     client = TaxiClient("http://localhost:8000")
     client.health()
     client.predict_fare(trip_distance=3.4, pu_location_id=132,
-                        do_location_id=230, pickup_datetime="2024-01-15T18:30:00")
+                        do_location_id=230, pickup_datetime="2024-02-15T18:30:00")
     client.forecast_demand(horizon_hours=6, zones=[132, 230])
 """
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any
 
@@ -35,10 +36,15 @@ class TaxiClient:
         *,
         timeout: float = DEFAULT_TIMEOUT,
         session: requests.Session | None = None,
+        api_key: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._session = session or requests.Session()
+        # Sent as X-API-Key when the service requires one; defaults to $API_KEY.
+        api_key = api_key if api_key is not None else os.environ.get("API_KEY")
+        if api_key:
+            self._session.headers["X-API-Key"] = api_key
 
     # -- internal helpers ----------------------------------------------------
     def _get(self, path: str) -> dict[str, Any]:
@@ -144,7 +150,7 @@ def _demo(base_url: str = "http://localhost:8000") -> None:
             trip_distance=3.4,
             pu_location_id=132,
             do_location_id=230,
-            pickup_datetime="2024-01-15T18:30:00",
+            pickup_datetime="2024-02-15T18:30:00",
         ),
     )
     print("forecast:", client.forecast_demand(horizon_hours=3, zones=[132]))

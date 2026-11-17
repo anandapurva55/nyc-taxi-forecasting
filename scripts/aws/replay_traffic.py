@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -30,6 +31,8 @@ _local = threading.local()
 def _session() -> requests.Session:
     if not hasattr(_local, "session"):
         _local.session = requests.Session()
+        if os.environ.get("API_KEY"):
+            _local.session.headers["X-API-Key"] = os.environ["API_KEY"]
     return _local.session
 
 

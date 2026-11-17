@@ -49,9 +49,14 @@ output "capture_firehose_name" {
   value       = var.enable_monitoring ? aws_kinesis_firehose_delivery_stream.capture[0].name : ""
 }
 
-output "drift_schedule_name" {
-  description = "EventBridge Scheduler that starts the weekly drift-detection SageMaker Processing job (empty unless monitoring_image_uri is set)."
-  value       = local.drift_enabled == 1 ? aws_scheduler_schedule.drift[0].name : ""
+output "drift_schedule_names" {
+  description = "EventBridge Schedulers that start the weekly drift Processing jobs, one per model (empty unless monitoring_image_uri is set)."
+  value       = { for problem, schedule in aws_scheduler_schedule.drift : problem => schedule.name }
+}
+
+output "performance_schedule_name" {
+  description = "EventBridge Scheduler that starts the weekly live demand-accuracy Processing job (empty unless monitoring_image_uri is set)."
+  value       = local.drift_enabled == 1 ? aws_scheduler_schedule.performance[0].name : ""
 }
 
 # --- CI/CD outputs -----------------------------------------------------------

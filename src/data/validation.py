@@ -160,3 +160,33 @@ def clean_trips(
         report.total_dropped,
     )
     return df, report
+
+
+def select_pickups(
+    df: pd.DataFrame, year: int | None = None, month: int | None = None
+) -> tuple[pd.DataFrame, CleaningReport]:
+    """Keep every real pickup for demand counting.
+
+    Demand is "how many trips started here this hour", so only the pickup time
+    and pickup zone must be valid. The fare-specific rules in :func:`clean_trips`
+    (fare, distance, duration, passenger count) would undercount demand, and not
+    evenly across zones.
+    """
+    report = CleaningReport(input_rows=len(df))
+    work = df[["tpep_pickup_datetime", "PULocationID"]].copy()
+    work["tpep_pickup_datetime"] = pd.to_datetime(work["tpep_pickup_datetime"], errors="coerce")
+
+    invalid = work["tpep_pickup_datetime"].isna() | work["PULocationID"].isna()
+    if int(invalid.sum()):
+        report.dropped["null_pickup_time_or_zone"] = int(invalid.sum())
+        work = work.loc[~invalid]
+
+    if year is not None and month is not None:
+        work, removed = filter_to_period(work, year, month)
+        if removed:
+            report.dropped["outside_target_period"] = removed
+
+    work = work.reset_index(drop=True)
+    report.output_rows = len(work)
+    logger.info("Pickups for demand: %d -> %d rows", report.input_rows, report.output_rows)
+    return work, report

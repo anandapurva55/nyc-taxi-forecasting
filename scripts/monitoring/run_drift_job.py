@@ -30,15 +30,19 @@ import pandas as pd
 
 from src.config import get_config
 from src.models.common import PROBLEMS, load_split
-from src.monitoring import compute_drift
 from src.monitoring.capture import load_capture_file, load_capture_s3
+from src.monitoring.drift import compute_drift, compute_prediction_drift
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("drift-job")
 
 
 def _load_reference(problem: str, reference_dir: str | None) -> pd.DataFrame:
-    """Reference = training-split feature matrix for the problem."""
+    """Reference = training-split feature matrix for the problem.
+
+    The demand model takes no zone input and its training table holds every zone
+    in every hour, so zone drift is only checked for fares.
+    """
     if reference_dir:
         path = Path(reference_dir) / f"{problem}_reference.parquet"
         logger.info("Loading reference from %s", path)
@@ -46,6 +50,14 @@ def _load_reference(problem: str, reference_dir: str | None) -> pd.DataFrame:
     config = get_config()
     X, _ = load_split(config, problem, "train")
     return X
+
+
+def _load_reference_target(problem: str, reference_dir: str | None) -> pd.Series | None:
+    """Training target, the baseline for prediction drift (None if unavailable)."""
+    if reference_dir:
+        return None
+    _, y = load_split(get_config(), problem, "train")
+    return y
 
 
 def _load_current(
@@ -119,6 +131,11 @@ def run(args: argparse.Namespace) -> int:
     report = compute_drift(
         reference, current, psi_threshold=args.psi_threshold, ks_alpha=args.ks_alpha
     )
+    target = _load_reference_target(args.problem, args.reference_dir)
+    if target is not None and "prediction" in current.columns:
+        report.prediction = compute_prediction_drift(
+            target, current["prediction"], psi_threshold=args.psi_threshold
+        )
     summary = {"problem": args.problem, "n_current": int(len(current)), **report.to_dict()}
     (output_dir / "drift_metrics.json").write_text(json.dumps(summary, indent=2))
     logger.info(

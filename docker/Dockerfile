@@ -12,10 +12,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements.txt ./
+# Runtime dependencies only (no notebook, test or lint tooling), with every
+# transitive version pinned by the lockfile.
+COPY requirements-serving.txt requirements.lock ./
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install -r requirements.txt
+    && /opt/venv/bin/pip install -r requirements-serving.txt -c requirements.lock
 
 # --- Runtime: copy venv + source ---------------------------------------------
 FROM python:3.11-slim AS runtime
@@ -40,10 +42,18 @@ COPY scripts ./scripts
 # the demand history at startup with no external mounts. `mlflow.container.db`
 # is produced by scripts/make_mlflow_portable.py so artifact paths resolve at
 # /app/mlruns inside this Linux image (the dev mlflow.db has absolute host paths).
+# config/build_info.json (written by scripts/write_build_info.py) records the
+# commit, model versions and input hashes; the API serves it at /version.
 ENV MLFLOW_TRACKING_URI=sqlite:///mlflow.db
 COPY mlruns ./mlruns
 COPY mlflow.container.db ./mlflow.db
 COPY data/processed/demand_hourly.parquet ./data/processed/demand_hourly.parquet
+
+# Run as an unprivileged user. MLflow opens the SQLite registry read-write, so
+# the app user owns /app.
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
 
 EXPOSE 8000
 

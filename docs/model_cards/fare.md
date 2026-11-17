@@ -1,13 +1,13 @@
 # Model Card - taxi-fare-predictor
 
-_Generated: 2026-10-25 13:17 UTC_
+_Generated: 2026-11-17 09:06 UTC_
 
 ## Model details
 
 - **Problem:** fare
 - **Algorithm:** LGBMRegressor
 - **Target:** `fare_amount`
-- **Registry version:** n/a
+- **Registry version:** 2 (@champion)
 
 ## Intended use
 
@@ -17,75 +17,67 @@ Operational forecasting of fare_amount to support fleet positioning and rider fa
 
 | Metric | Value |
 |--------|-------|
-| rmse | 3.3046 |
-| mae | 0.8143 |
-| mape | 5.5093 |
-| r2 | 0.9602 |
+| rmse | 3.2130 |
+| mae | 0.7741 |
+| mape | 5.6568 |
+| r2 | 0.9624 |
 
 ## Evaluation - subgroup fairness
 
 ### By borough
 
-Disparity ratio (worst/best RMSE): **5.80** (threshold 1.5) - ⚠️ **flagged**. Worst: `Unknown`, best: `Manhattan`.
+Disparity ratio (worst/best WAPE): **4.29** (threshold 1.5) - ⚠️ **flagged**. RMSE ratio for context: 5.00. Worst: `Brooklyn`, best: `Manhattan`.
 
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| Unknown | 925 | 12.118 | 2.663 | 30.45 |
-| Brooklyn | 1932 | 10.521 | 4.795 | 20.20 |
-| Bronx | 466 | 9.609 | 5.861 | 19.18 |
-| Queens | 23593 | 7.897 | 2.639 | 12.41 |
-| Manhattan | 245373 | 2.088 | 0.590 | 4.60 |
+| Group | n | Mean actual | WAPE | RMSE | MAE |
+|-------|---|-------------|------|------|-----|
+| Brooklyn | 1932 | 28.51 | 0.164 | 10.334 | 4.671 |
+| Bronx | 466 | 35.52 | 0.161 | 9.480 | 5.710 |
+| Unknown | 925 | 20.83 | 0.116 | 10.254 | 2.424 |
+| Queens | 23593 | 52.62 | 0.044 | 7.653 | 2.320 |
+| Manhattan | 245373 | 15.14 | 0.038 | 2.067 | 0.578 |
 
 ### By time_of_day
 
-Disparity ratio (worst/best RMSE): **1.83** (threshold 1.5) - ⚠️ **flagged**. Worst: `overnight`, best: `evening`.
+Disparity ratio (worst/best WAPE): **1.46** (threshold 1.5) - ok. RMSE ratio for context: 1.85. Worst: `overnight`, best: `evening`.
 
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| overnight | 7020 | 5.548 | 1.365 | 6.18 |
-| afternoon | 97932 | 3.465 | 0.880 | 7.40 |
-| morning | 51445 | 3.175 | 0.872 | 4.62 |
-| evening | 115897 | 3.028 | 0.700 | 4.26 |
+| Group | n | Mean actual | WAPE | RMSE | MAE |
+|-------|---|-------------|------|------|-----|
+| overnight | 7020 | 22.94 | 0.055 | 5.429 | 1.264 |
+| morning | 51445 | 18.03 | 0.046 | 3.050 | 0.833 |
+| afternoon | 97932 | 19.52 | 0.043 | 3.397 | 0.836 |
+| evening | 115897 | 17.66 | 0.038 | 2.931 | 0.666 |
 
 ### By day_type
 
-Disparity ratio (worst/best RMSE): **1.00** (threshold 1.5) - ok. Worst: `weekday`, best: `weekday`.
-
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| weekday | 272294 | 3.305 | 0.814 | 5.51 |
+Coverage gap: fewer than two groups with enough volume appear in the evaluation data, so this dimension could not be audited.
 
 ### By holiday
 
-Disparity ratio (worst/best RMSE): **1.00** (threshold 1.5) - ok. Worst: `non-holiday`, best: `non-holiday`.
-
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| non-holiday | 272294 | 3.305 | 0.814 | 5.51 |
+Coverage gap: fewer than two groups with enough volume appear in the evaluation data, so this dimension could not be audited.
 
 ### By airport
 
-Disparity ratio (worst/best RMSE): **2.80** (threshold 1.5) - ⚠️ **flagged**. Worst: `airport`, best: `non-airport`.
+Disparity ratio (worst/best WAPE): **1.21** (threshold 1.5) - ok. RMSE ratio for context: 2.76. Worst: `non-airport`, best: `airport`.
 
-| Group | n | RMSE | MAE | MAPE |
-|-------|---|------|-----|------|
-| airport | 20892 | 7.500 | 2.310 | 4.99 |
-| non-airport | 251402 | 2.674 | 0.690 | 5.55 |
+| Group | n | Mean actual | WAPE | RMSE | MAE |
+|-------|---|-------------|------|------|-----|
+| non-airport | 251402 | 15.56 | 0.043 | 2.617 | 0.676 |
+| airport | 20892 | 54.38 | 0.036 | 7.220 | 1.954 |
 
 ## Top features (SHAP)
 
 | Feature | Mean |SHAP| |
 |---------|-----------|
-| trip_distance | 6.7039 |
-| trip_duration_min | 3.9719 |
-| PULocationID | 0.6328 |
-| DOLocationID | 0.4711 |
-| hour_cos | 0.1013 |
-| passenger_count | 0.0856 |
-| hour | 0.0698 |
-| dow_sin | 0.0398 |
-| hour_sin | 0.0350 |
-| dow_cos | 0.0234 |
+| trip_distance | 7.3007 |
+| trip_duration_min | 4.1644 |
+| airport_trip | 0.5912 |
+| DOLocationID | 0.2885 |
+| jfk_manhattan | 0.1685 |
+| PULocationID | 0.1288 |
+| passenger_count | 0.0858 |
+| hour_cos | 0.0638 |
+| hour_sin | 0.0289 |
+| dow_sin | 0.0255 |
 
 ## Limitations
 

@@ -2,7 +2,8 @@
 
 Builds a per-trip supervised table for predicting ``fare_amount`` from trip
 attributes available at (or near) pickup time: trip distance, passenger count,
-pickup/drop-off zones and calendar signals derived from the pickup timestamp.
+pickup/drop-off zones, airport flags and calendar signals derived from the
+pickup timestamp.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import logging
 import pandas as pd
 
 from src.config import Config, get_config
+from src.features import zones
 from src.features.calendar import add_calendar_features
 
 logger = logging.getLogger(__name__)
@@ -45,7 +47,16 @@ def build_fare_features(
     df = trips[required].copy()
     df = add_calendar_features(df, TIME_COL)
 
-    df["passenger_count"] = df["passenger_count"].fillna(1).astype("int64")
+    # Validation drops trips without a passenger count, so no fill is needed here.
+    df["passenger_count"] = df["passenger_count"].astype("int64")
+    # Airport trips carry tolls and, for JFK to Manhattan, a flat fare. Explicit
+    # flags let the trees isolate them instead of learning them from zone IDs.
+    pu = df["PULocationID"].astype(int)
+    do = df["DOLocationID"].astype(int)
+    df["airport_trip"] = (pu.isin(zones.AIRPORT_ZONES) | do.isin(zones.AIRPORT_ZONES)).astype("int64")
+    jfk_pu = (pu == zones.JFK_ZONE) & do.isin(zones.MANHATTAN_ZONES)
+    jfk_do = (do == zones.JFK_ZONE) & pu.isin(zones.MANHATTAN_ZONES)
+    df["jfk_manhattan"] = (jfk_pu | jfk_do).astype("int64")
     df = df.reset_index(drop=True)
     logger.info("Fare feature table: %d rows x %d cols", *df.shape)
     return df
@@ -55,3 +66,12 @@ def feature_columns(df: pd.DataFrame) -> list[str]:
     """Return the model input columns (everything except target/time)."""
     exclude = {TARGET, TIME_COL}
     return [c for c in df.columns if c not in exclude]
+
+
+# Not known when a fare is quoted before the trip.
+BOOKING_EXCLUDED = ("trip_duration_min",)
+
+
+def booking_feature_columns(df: pd.DataFrame) -> list[str]:
+    """Model inputs for booking-time quotes: everything known before the trip starts."""
+    return [c for c in feature_columns(df) if c not in BOOKING_EXCLUDED]

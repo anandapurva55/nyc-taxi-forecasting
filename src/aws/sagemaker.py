@@ -48,7 +48,7 @@ def build_training_env(config: Config | None = None) -> dict[str, str]:
 
 
 def training_job_arguments(
-    problem: str = "both",
+    problem: str = "all",
     n_trials: int | None = None,
     register: bool = True,
 ) -> list[str]:
@@ -65,7 +65,7 @@ def submit_training_job(
     role_arn: str,
     image_uri: str,
     *,
-    problem: str = "both",
+    problem: str = "all",
     n_trials: int | None = None,
     register: bool = True,
     region: str = "us-east-1",

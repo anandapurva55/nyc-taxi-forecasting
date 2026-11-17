@@ -10,8 +10,14 @@ feature using two complementary signals:
 - **KS two-sample test**: distribution-free test; a small p-value indicates the
   two samples are unlikely to share a distribution.
 
+Zone IDs are labels, not quantities, so binning them by numeric quantiles is
+meaningless. Categorical features instead get a PSI over category shares (rare
+categories pooled) and a chi-square test in place of KS.
+
 The ``drifted`` flag is driven primarily by PSI (stable across sample sizes);
-the KS statistic/p-value are reported alongside for context.
+the test statistic and p-value are reported alongside for context. A separate
+prediction-drift check compares the distribution of model outputs with the
+training target distribution.
 """
 
 from __future__ import annotations
@@ -21,11 +27,15 @@ from dataclasses import asdict, dataclass, field
 
 import numpy as np
 import pandas as pd
-from scipy.stats import ks_2samp
+from scipy.stats import chi2_contingency, ks_2samp
 
 DEFAULT_PSI_THRESHOLD = 0.2
 DEFAULT_KS_ALPHA = 0.05
 DEFAULT_BINS = 10
+# Features that are category labels (TLC zone IDs), compared by category share.
+DEFAULT_CATEGORICAL = ("PULocationID", "DOLocationID")
+# Categories rarer than this share of the reference are pooled into one bucket.
+MIN_CATEGORY_SHARE = 0.005
 
 
 def population_stability_index(
@@ -61,15 +71,58 @@ def population_stability_index(
     return float(np.sum((cur_pct - ref_pct) * np.log(cur_pct / ref_pct)))
 
 
+def _category_shares(
+    reference: pd.Series, current: pd.Series, min_share: float = MIN_CATEGORY_SHARE
+) -> tuple[np.ndarray, np.ndarray]:
+    """Counts per category for both samples, with rare reference categories pooled."""
+    ref = reference.dropna().astype(str)
+    cur = current.dropna().astype(str)
+    shares = ref.value_counts(normalize=True)
+    keep = set(shares[shares >= min_share].index)
+    ref = ref.where(ref.isin(keep), "__other__")
+    cur = cur.where(cur.isin(keep), "__other__")
+    categories = sorted(set(ref.unique()) | set(cur.unique()))
+    ref_counts = ref.value_counts().reindex(categories, fill_value=0).to_numpy()
+    cur_counts = cur.value_counts().reindex(categories, fill_value=0).to_numpy()
+    return ref_counts, cur_counts
+
+
+def categorical_psi(reference: pd.Series, current: pd.Series) -> float:
+    """PSI over category shares (rare categories pooled)."""
+    ref_counts, cur_counts = _category_shares(reference, current)
+    if ref_counts.sum() == 0 or cur_counts.sum() == 0:
+        return 0.0
+    eps = 1e-6
+    ref_pct = ref_counts / ref_counts.sum() + eps
+    cur_pct = cur_counts / cur_counts.sum() + eps
+    return float(np.sum((cur_pct - ref_pct) * np.log(cur_pct / ref_pct)))
+
+
+def _chi_square(reference: pd.Series, current: pd.Series) -> tuple[float, float]:
+    ref_counts, cur_counts = _category_shares(reference, current)
+    table = np.vstack([ref_counts, cur_counts])
+    table = table[:, table.sum(axis=0) > 0]
+    if table.shape[1] < 2 or cur_counts.sum() == 0:
+        return 0.0, 1.0
+    stat, pvalue, _, _ = chi2_contingency(table)
+    return float(stat), float(pvalue)
+
+
 @dataclass
 class FeatureDrift:
-    """Per-feature drift result."""
+    """Per-feature drift result.
+
+    ``statistic``/``pvalue`` come from ``test``: "ks" for numeric features and
+    "chi2" for categorical ones.
+    """
 
     feature: str
     psi: float
-    ks_statistic: float
-    ks_pvalue: float
+    statistic: float
+    pvalue: float
     drifted: bool
+    kind: str = "numeric"
+    test: str = "ks"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -82,6 +135,8 @@ class DriftReport:
     features: list[FeatureDrift] = field(default_factory=list)
     psi_threshold: float = DEFAULT_PSI_THRESHOLD
     ks_alpha: float = DEFAULT_KS_ALPHA
+    # Model outputs vs the training target distribution; reported separately.
+    prediction: FeatureDrift | None = None
 
     @property
     def n_features(self) -> int:
@@ -109,6 +164,7 @@ class DriftReport:
             "psi_threshold": self.psi_threshold,
             "ks_alpha": self.ks_alpha,
             "features": [f.to_dict() for f in self.features],
+            "prediction_drift": self.prediction.to_dict() if self.prediction else None,
         }
 
     def cloudwatch_metrics(self, namespace: str = "TaxiForecasting/Drift") -> list[dict]:
@@ -121,7 +177,35 @@ class DriftReport:
                 "Value": max((f.psi for f in self.features), default=0.0),
                 "Unit": "None",
             },
-        ]
+        ] + (
+            [{"MetricName": "PredictionPSI", "Value": float(self.prediction.psi), "Unit": "None"}]
+            if self.prediction is not None
+            else []
+        )
+
+
+def _numeric_drift(col: str, ref_s: pd.Series, cur_s: pd.Series, bins: int, threshold: float):
+    ref = pd.to_numeric(ref_s, errors="coerce").to_numpy()
+    cur = pd.to_numeric(cur_s, errors="coerce").to_numpy()
+    psi = population_stability_index(ref, cur, bins=bins)
+    ref_clean = ref[~np.isnan(ref)]
+    cur_clean = cur[~np.isnan(cur)]
+    if ref_clean.size and cur_clean.size:
+        ks = ks_2samp(ref_clean, cur_clean)
+        stat, pvalue = float(ks.statistic), float(ks.pvalue)
+    else:
+        stat, pvalue = 0.0, 1.0
+    return FeatureDrift(col, psi, stat, pvalue, bool(psi >= threshold), "numeric", "ks")
+
+
+def compute_prediction_drift(
+    reference_target: pd.Series,
+    predictions: pd.Series,
+    psi_threshold: float = DEFAULT_PSI_THRESHOLD,
+    bins: int = DEFAULT_BINS,
+) -> FeatureDrift:
+    """Compare the distribution of model outputs with the training target distribution."""
+    return _numeric_drift("prediction", reference_target, predictions, bins, psi_threshold)
 
 
 def compute_drift(
@@ -131,11 +215,14 @@ def compute_drift(
     psi_threshold: float = DEFAULT_PSI_THRESHOLD,
     ks_alpha: float = DEFAULT_KS_ALPHA,
     bins: int = DEFAULT_BINS,
+    categorical: Sequence[str] = DEFAULT_CATEGORICAL,
 ) -> DriftReport:
-    """Compare ``current`` against ``reference`` over the given numeric features.
+    """Compare ``current`` against ``reference`` over the given features.
 
     If ``features`` is omitted, the numeric columns common to both frames are
-    used. Raises ``ValueError`` when no comparable features are found.
+    used. Columns listed in ``categorical`` are compared by category share with a
+    chi-square test; the rest by quantile PSI with a KS test. Raises
+    ``ValueError`` when no comparable features are found.
     """
     if features is None:
         common = [c for c in reference.columns if c in current.columns]
@@ -144,27 +231,19 @@ def compute_drift(
     if not features:
         raise ValueError("No numeric features in common between reference and current.")
 
+    categorical = set(categorical)
     results: list[FeatureDrift] = []
     for col in features:
-        ref = pd.to_numeric(reference[col], errors="coerce").to_numpy()
-        cur = pd.to_numeric(current[col], errors="coerce").to_numpy()
-        psi = population_stability_index(ref, cur, bins=bins)
-        ref_clean = ref[~np.isnan(ref)]
-        cur_clean = cur[~np.isnan(cur)]
-        if ref_clean.size and cur_clean.size:
-            ks = ks_2samp(ref_clean, cur_clean)
-            ks_stat, ks_p = float(ks.statistic), float(ks.pvalue)
-        else:
-            ks_stat, ks_p = 0.0, 1.0
-        results.append(
-            FeatureDrift(
-                feature=col,
-                psi=psi,
-                ks_statistic=ks_stat,
-                ks_pvalue=ks_p,
-                drifted=bool(psi >= psi_threshold),
+        if col in categorical:
+            psi = categorical_psi(reference[col], current[col])
+            stat, pvalue = _chi_square(reference[col], current[col])
+            results.append(
+                FeatureDrift(col, psi, stat, pvalue, bool(psi >= psi_threshold), "categorical", "chi2")
             )
-        )
+        else:
+            results.append(
+                _numeric_drift(col, reference[col], current[col], bins, psi_threshold)
+            )
 
     return DriftReport(features=results, psi_threshold=psi_threshold, ks_alpha=ks_alpha)
 
