@@ -300,3 +300,32 @@ def test_rate_limiter_sliding_window():
     assert limiter.allow("b", 2, now=2.0)
     assert limiter.allow("a", 2, now=61.0)
     assert limiter.allow("a", 0, now=61.5)
+
+
+def _request(forwarded=None, peer="10.0.0.9"):
+    from types import SimpleNamespace as NS
+
+    headers = {"X-Forwarded-For": forwarded} if forwarded else {}
+    return NS(headers=headers, client=NS(host=peer))
+
+
+def test_client_ip_ignores_spoofed_forwarded_entries(monkeypatch):
+    from src.serving.security import client_ip
+
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")  # load balancer only
+    assert client_ip(_request("6.6.6.6, 203.0.113.7")) == "203.0.113.7"
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "2")  # CloudFront, then the load balancer
+    assert client_ip(_request("6.6.6.6, 203.0.113.7, 130.176.1.1")) == "203.0.113.7"
+    assert client_ip(_request(None)) == "10.0.0.9"
+
+
+def test_rate_limiter_forgets_idle_clients():
+    from src.serving.security import WINDOW_SECONDS, RateLimiter
+
+    limiter = RateLimiter()
+    for i in range(500):
+        limiter.allow(f"10.0.{i // 250}.{i % 250}", 5, now=1.0)
+    assert len(limiter) == 500
+    limiter.allow("198.51.100.1", 5, now=1.0 + WINDOW_SECONDS + 1)
+    assert len(limiter) == 1
+

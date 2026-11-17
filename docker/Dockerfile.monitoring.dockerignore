@@ -1,8 +1,8 @@
 # Build context for docker/Dockerfile.monitoring: code, config and the
 # training splits used as the drift reference. Nothing else.
 **
-!requirements-serving.txt
-!requirements.lock
+!pyproject.toml
+!uv.lock
 !src/**
 !config/**
 !scripts/**

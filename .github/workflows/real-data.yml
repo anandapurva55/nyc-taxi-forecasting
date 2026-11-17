@@ -1,0 +1,30 @@
+# Weekly check on the real data. The tests in tests/realdata skip when the TLC
+# files are absent, which is the case in the main CI job, so this workflow
+# downloads February 2024, runs the pipeline and then runs them.
+name: Real data checks
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-data:
+    name: Pipeline and real-data tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.1"
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install dependencies (exact versions from uv.lock)
+        run: uv sync --frozen
+      - name: Download and process February 2024
+        run: uv run --frozen python -m scripts.run_pipeline --year 2024 --month 2
+      - name: Real-data tests (must run, not skip)
+        run: uv run --frozen pytest tests/realdata -rs -p no:cacheprovider -o addopts="" --junitxml=realdata.xml && ! grep -q "<skipped" realdata.xml

@@ -1,6 +1,6 @@
 output "api_url" {
-  description = "Public HTTP endpoint of the API (via the ALB)."
-  value       = "http://${aws_lb.api.dns_name}"
+  description = "Public endpoint of the API: HTTPS through CloudFront, or HTTP on the ALB when HTTPS is off."
+  value       = var.enable_https ? "https://${aws_cloudfront_distribution.api[0].domain_name}" : "http://${aws_lb.api.dns_name}"
 }
 
 output "resource_group_name" {
@@ -88,8 +88,10 @@ output "athena_workgroup" {
 
 # --- dashboard outputs ----------------------------------------------
 output "dashboard_url" {
-  description = "Public HTTP endpoint of the Streamlit dashboard (via its ALB)."
-  value       = var.enable_dashboard ? "http://${aws_lb.dashboard[0].dns_name}" : ""
+  description = "Public endpoint of the Streamlit dashboard: HTTPS through CloudFront, or HTTP on its ALB."
+  value = (!var.enable_dashboard ? "" : var.enable_https
+    ? "https://${aws_cloudfront_distribution.dashboard[0].domain_name}"
+  : "http://${aws_lb.dashboard[0].dns_name}")
 }
 
 output "dashboard_ecr_repository_url" {

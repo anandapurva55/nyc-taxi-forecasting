@@ -49,7 +49,7 @@ def _client(region: str | None = None):  # pragma: no cover - thin boto3 wrapper
         import boto3
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "boto3 is not installed; add requirements-monitoring.txt in the job image."
+            "boto3 is not installed; install the aws dependency group (uv sync --group aws)."
         ) from exc
     return boto3.client("s3", region_name=region) if region else boto3.client("s3")
 

@@ -7,6 +7,29 @@ import pytest
 from tests.synthetic import make_synthetic_trips
 
 
+@pytest.fixture(scope="session", autouse=True)
+def isolated_mlflow(tmp_path_factory):
+    """Send every MLflow call in the test run to a throwaway store.
+
+    MLflow 3 defaults to ``sqlite:///mlflow.db`` in the working directory, so a
+    test that logs without configuring MLflow would otherwise write into the
+    project's real registry.
+    """
+    import os
+
+    import mlflow
+
+    uri = f"sqlite:///{tmp_path_factory.mktemp('mlflow') / 'mlflow.db'}"
+    previous = os.environ.get("MLFLOW_TRACKING_URI")
+    os.environ["MLFLOW_TRACKING_URI"] = uri
+    mlflow.set_tracking_uri(uri)
+    yield uri
+    if previous is None:
+        os.environ.pop("MLFLOW_TRACKING_URI", None)
+    else:
+        os.environ["MLFLOW_TRACKING_URI"] = previous
+
+
 @pytest.fixture(scope="session")
 def raw_trips():
     """A synthetic raw trips DataFrame (includes dirty rows)."""

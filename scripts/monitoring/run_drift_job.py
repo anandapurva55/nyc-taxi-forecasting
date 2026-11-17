@@ -85,6 +85,14 @@ CAPTURE_TO_FEATURE = {
 }
 
 
+def _capture_window(current: pd.DataFrame) -> tuple | None:
+    """First and last target hour of captured demand requests, if recorded."""
+    if "target_hour" not in current.columns:
+        return None
+    hours = pd.to_datetime(current["target_hour"], errors="coerce").dropna()
+    return (hours.min(), hours.max()) if not hours.empty else None
+
+
 def _align_capture_columns(current: pd.DataFrame, problem: str) -> pd.DataFrame:
     """Rename captured API fields so they line up with the reference features."""
     return current.rename(columns=CAPTURE_TO_FEATURE.get(problem, {}))
@@ -129,7 +137,11 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     report = compute_drift(
-        reference, current, psi_threshold=args.psi_threshold, ks_alpha=args.ks_alpha
+        reference,
+        current,
+        psi_threshold=args.psi_threshold,
+        ks_alpha=args.ks_alpha,
+        window=_capture_window(current),
     )
     target = _load_reference_target(args.problem, args.reference_dir)
     if target is not None and "prediction" in current.columns:

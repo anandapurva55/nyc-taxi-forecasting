@@ -77,7 +77,7 @@ def submit_training_job(
     """Run ``scripts/train_models.py`` as a SageMaker Processing job.
 
     ``image_uri`` is a training image containing this repo's code + deps
-    (``requirements.txt`` + ``requirements-monitoring.txt``). Returns the job name.
+    (the runtime dependencies plus the ``aws`` group). Returns the job name.
     """
     try:
         import boto3
@@ -85,7 +85,7 @@ def submit_training_job(
         from sagemaker.session import Session
     except ImportError as exc:
         raise RuntimeError(
-            "sagemaker/boto3 not installed; add requirements-monitoring.txt."
+            "sagemaker/boto3 not installed; install the aws dependency group (uv sync --group aws)."
         ) from exc
 
     session = Session(boto_session=boto3.Session(region_name=region))
@@ -151,7 +151,7 @@ def submit_drift_job(
     """Run ``scripts/monitoring/run_drift_job.py`` as a SageMaker Processing job.
 
     ``image_uri`` is a monitoring image containing this repo's code + deps
-    (``requirements.txt`` + ``requirements-monitoring.txt``). The job reads
+    (the runtime dependencies plus the ``aws`` group). The job reads
     captured records from ``current_s3`` and uploads ``drift_metrics.json`` to
     ``output_s3_uri`` (when given). Returns the job name.
     """
@@ -161,7 +161,7 @@ def submit_drift_job(
         from sagemaker.session import Session
     except ImportError as exc:
         raise RuntimeError(
-            "sagemaker/boto3 not installed; add requirements-monitoring.txt."
+            "sagemaker/boto3 not installed; install the aws dependency group (uv sync --group aws)."
         ) from exc
 
     session = Session(boto_session=boto3.Session(region_name=region))

@@ -3,7 +3,7 @@
 #
 # A second ECS Fargate service behind its own ALB, serving the Streamlit
 # dashboard image from a dedicated ECR repo. The dashboard is stateless and
-# talks to the API service over HTTP via API_BASE_URL (the API ALB DNS).
+# talks to the API service via API_BASE_URL (CloudFront over HTTPS, or the API ALB).
 #
 # Everything here is gated by `enable_dashboard` (default false) so it incurs
 # no cost unless explicitly turned on, mirroring the CI/CD stack pattern.
@@ -54,12 +54,14 @@ resource "aws_security_group" "dashboard_alb" {
   description = "Allow inbound HTTP to the dashboard load balancer"
   vpc_id      = data.aws_vpc.default.id
 
+  # With HTTPS on, only CloudFront may reach the load balancer (see cdn.tf).
   ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = var.enable_https ? "HTTP from CloudFront only" : "HTTP"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    cidr_blocks     = var.enable_https ? [] : ["0.0.0.0/0"]
+    prefix_list_ids = var.enable_https ? [data.aws_ec2_managed_prefix_list.cloudfront.id] : []
   }
 
   egress {
@@ -164,11 +166,12 @@ resource "aws_ecs_task_definition" "dashboard" {
           protocol      = "tcp"
         }
       ]
-      # Point the dashboard at the API service's public ALB.
+      # Point the dashboard at the API: through CloudFront over HTTPS when it is
+      # on, because the API load balancer then accepts only CloudFront traffic.
       environment = [
         {
           name  = "API_BASE_URL"
-          value = "http://${aws_lb.api.dns_name}"
+          value = var.enable_https ? "https://${aws_cloudfront_distribution.api[0].domain_name}" : "http://${aws_lb.api.dns_name}"
         },
         {
           name  = "PYTHONFAULTHANDLER"

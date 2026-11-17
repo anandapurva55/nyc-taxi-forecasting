@@ -64,12 +64,14 @@ resource "aws_security_group" "alb" {
   description = "Allow inbound HTTP to the load balancer"
   vpc_id      = data.aws_vpc.default.id
 
+  # With HTTPS on, only CloudFront may reach the load balancer (see cdn.tf).
   ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    description     = var.enable_https ? "HTTP from CloudFront only" : "HTTP"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    cidr_blocks     = var.enable_https ? [] : ["0.0.0.0/0"]
+    prefix_list_ids = var.enable_https ? [data.aws_ec2_managed_prefix_list.cloudfront.id] : []
   }
 
   egress {
@@ -199,6 +201,8 @@ resource "aws_ecs_task_definition" "api" {
       # as a secret read from SSM Parameter Store at task start.
       environment = [
         { name = "RATE_LIMIT_PER_MINUTE", value = tostring(var.api_rate_limit_per_minute) },
+        # CloudFront and the load balancer each append to X-Forwarded-For.
+        { name = "TRUSTED_PROXY_HOPS", value = var.enable_https ? "2" : "1" },
         { name = "CORS_ALLOW_ORIGINS", value = join(",", var.api_cors_allow_origins) },
       ]
       secrets = var.api_key == "" ? [] : [

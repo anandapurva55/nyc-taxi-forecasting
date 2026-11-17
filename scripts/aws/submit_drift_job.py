@@ -3,7 +3,7 @@
 Runs ``scripts/monitoring/run_drift_job.py`` on managed cloud compute - the same
 entrypoint the weekly EventBridge schedule invokes. Use it to produce an
 on-demand Processing job (e.g. before a console walkthrough). Requires AWS
-credentials, ``requirements-monitoring.txt`` (sagemaker + boto3), the SageMaker
+credentials, the ``aws`` dependency group (sagemaker + boto3), the SageMaker
 execution role (Terraform output ``sagemaker_role_arn``), and a monitoring image
 in ECR that bakes in this repo's code + deps.
 

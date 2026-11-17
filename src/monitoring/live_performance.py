@@ -4,16 +4,74 @@ Input drift says the data changed; it does not say the model got worse. This
 module closes that gap: captured demand predictions (zone + target hour) are
 joined to the actual hourly pickup counts once they are published, and live
 error is compared with the model's offline test baseline.
+
+Actual counts come from the NYC TLC monthly trip files, which are published
+about two months after the month ends. :func:`build_actuals` downloads the
+months the captured predictions target and builds hourly counts with the same
+code as the training pipeline; predictions for months not yet published are
+reported as pending.
 """
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
+
 import numpy as np
 import pandas as pd
+import requests
 
 from src.models.common import mae, rmse
 from src.monitoring.performance import DEFAULT_TOLERANCE, any_degraded, performance_degradation
 from src.responsible.fairness import wape
+
+logger = logging.getLogger(__name__)
+
+
+def target_months(captured: pd.DataFrame) -> list[tuple[int, int]]:
+    """Distinct (year, month) of the hours the captured predictions are for."""
+    if captured.empty or "target_hour" not in captured.columns:
+        return []
+    hours = pd.to_datetime(captured["target_hour"], errors="coerce").dropna()
+    return sorted({(int(h.year), int(h.month)) for h in hours})
+
+
+def build_actuals(
+    months: list[tuple[int, int]], download: Callable | None = None
+) -> tuple[pd.DataFrame, dict[str, str]]:
+    """Hourly pickup counts for each month, built from the published TLC files.
+
+    ``download(year, month)`` returns the local path of that month's trip file
+    (default: :func:`src.data.ingestion.download_trips`). Returns the combined
+    hourly table and the status of each month: ``published`` or ``not published``.
+    """
+    from src.data.aggregation import aggregate_hourly_demand
+    from src.data.validation import select_pickups
+
+    if download is None:
+        from src.data.ingestion import download_trips
+
+        def download(year, month):
+            return download_trips(year=year, month=month)
+
+    frames, status = [], {}
+    for year, month in months:
+        key = f"{year:04d}-{month:02d}"
+        try:
+            path = download(year, month)
+        except requests.HTTPError as exc:
+            if exc.response is not None and exc.response.status_code in (403, 404):
+                status[key] = "not published"
+                logger.info("TLC data for %s is not published yet", key)
+                continue
+            raise
+        trips = pd.read_parquet(path, columns=["tpep_pickup_datetime", "PULocationID"])
+        pickups, _ = select_pickups(trips, year=year, month=month)
+        frames.append(aggregate_hourly_demand(pickups))
+        status[key] = "published"
+    columns = ["PULocationID", "pickup_hour", "pickup_count"]
+    actuals = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=columns)
+    return actuals, status
 
 
 def join_demand_outcomes(captured: pd.DataFrame, actuals: pd.DataFrame) -> pd.DataFrame:
@@ -54,6 +112,7 @@ def evaluate_live_demand(
     actuals: pd.DataFrame,
     baseline: dict[str, float],
     tolerance: float = DEFAULT_TOLERANCE,
+    actuals_status: dict[str, str] | None = None,
 ) -> dict:
     """Live error, degradation flags and coverage for captured demand predictions."""
     joined = join_demand_outcomes(captured, actuals)
@@ -63,6 +122,13 @@ def evaluate_live_demand(
         "matched": int(len(joined)),
         "tolerance": tolerance,
     }
+    if actuals_status is not None:
+        pending = {m for m, s in actuals_status.items() if s != "published"}
+        summary["actuals_months"] = actuals_status
+        summary["pending"] = 0
+        if pending and "target_hour" in captured.columns:
+            months = pd.to_datetime(captured["target_hour"], errors="coerce").dt.strftime("%Y-%m")
+            summary["pending"] = int(months.isin(pending).sum())
     if joined.empty:
         return {**summary, "status": "no_matched_actuals", "degraded": False}
 
@@ -86,6 +152,7 @@ def cloudwatch_metrics(summary: dict) -> list[dict]:
     """Shape a live-performance summary as CloudWatch ``put_metric_data`` entries."""
     metrics = [
         {"MetricName": "MatchedPredictions", "Value": float(summary.get("matched", 0)), "Unit": "Count"},
+        {"MetricName": "PendingPredictions", "Value": float(summary.get("pending", 0)), "Unit": "Count"},
         {"MetricName": "PerformanceDegraded", "Value": float(bool(summary.get("degraded"))), "Unit": "Count"},
     ]
     for name, value in (summary.get("current") or {}).items():

@@ -99,14 +99,14 @@ def load_capture_file(path: str | Path, problem: str | None = None) -> pd.DataFr
 def load_capture_s3(bucket: str, prefix: str, problem: str | None = None):  # pragma: no cover
     """Load and concatenate all captured records under an S3 prefix.
 
-    boto3 is an AWS-job-only dependency (see ``requirements-monitoring.txt``) and
+    boto3 is an AWS-job-only dependency (the ``aws`` dependency group) and
     is imported lazily so local parsing stays dependency-free.
     """
     try:
         import boto3
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "boto3 is not installed; add requirements-monitoring.txt in the job image."
+            "boto3 is not installed; install the aws dependency group (uv sync --group aws)."
         ) from exc
 
     s3 = boto3.client("s3")

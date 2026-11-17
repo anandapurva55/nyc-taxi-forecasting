@@ -3,8 +3,10 @@
 Runs on a schedule (EventBridge -> SageMaker Processing). It:
 
 1. Loads captured demand predictions (Firehose output in S3, or a local folder).
-2. Loads realised hourly pickup counts (the demand table built by the pipeline
-   from the newest published TLC file), from S3 or a local path.
+2. Builds realised hourly pickup counts for the months those predictions target
+   from the published NYC TLC trip files (``--actuals tlc``, the default), or
+   reads a prepared hourly table from S3 or a local path. Predictions for months
+   the TLC has not published yet are counted as pending.
 3. Joins them on zone and target hour and computes live RMSE, MAE and WAPE.
 4. Compares live error with the served model's test baseline
    (``config/performance_baseline.json``, written at training time).
@@ -14,7 +16,7 @@ Runs on a schedule (EventBridge -> SageMaker Processing). It:
 Local dry-run (no AWS)::
 
     python -m scripts.monitoring.run_performance_job --current-dir ./captured \\
-        --actuals data/processed/demand_hourly.parquet --output-dir ./out --no-cloudwatch
+        --output-dir ./out --no-cloudwatch
 """
 
 from __future__ import annotations
@@ -30,7 +32,12 @@ import pandas as pd
 
 from src.config import PROJECT_ROOT
 from src.monitoring.capture import load_capture_file, load_capture_s3
-from src.monitoring.live_performance import cloudwatch_metrics, evaluate_live_demand
+from src.monitoring.live_performance import (
+    build_actuals,
+    cloudwatch_metrics,
+    evaluate_live_demand,
+    target_months,
+)
 from src.monitoring.performance import DEFAULT_TOLERANCE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -78,13 +85,20 @@ def run(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     captured = _load_current(args.current_dir, args.current_s3)
-    actuals = _load_actuals(args.actuals)
+    status = None
+    if args.actuals == "tlc":
+        actuals, status = build_actuals(target_months(captured))
+    else:
+        actuals = _load_actuals(args.actuals)
     baseline = _load_baseline(Path(args.baseline))
-    summary = evaluate_live_demand(captured, actuals, baseline, tolerance=args.tolerance)
+    summary = evaluate_live_demand(
+        captured, actuals, baseline, tolerance=args.tolerance, actuals_status=status
+    )
     (output_dir / "performance_metrics.json").write_text(json.dumps(summary, indent=2, default=str))
     logger.info(
-        "Live demand performance: matched %d of %d predictions, degraded=%s, current=%s",
-        summary["matched"], summary["captured"], summary["degraded"], summary.get("current"),
+        "Live demand performance: matched %d of %d predictions, %d pending, degraded=%s, current=%s",
+        summary["matched"], summary["captured"], summary.get("pending", 0), summary["degraded"],
+        summary.get("current"),
     )
     if not args.no_cloudwatch:
         _push_cloudwatch(args.namespace, cloudwatch_metrics(summary))
@@ -95,7 +109,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Live demand-prediction accuracy job.")
     p.add_argument("--current-dir", default=None, help="Local folder of captured predictions.")
     p.add_argument("--current-s3", default=None, help="s3://bucket/prefix of captured predictions.")
-    p.add_argument("--actuals", required=True, help="Hourly demand parquet (local path or s3://).")
+    p.add_argument(
+        "--actuals",
+        default="tlc",
+        help='"tlc" to build counts from the published TLC files, or an hourly table (path or s3://).',
+    )
     p.add_argument("--baseline", default=str(BASELINE_PATH), help="Baseline metrics JSON.")
     p.add_argument("--tolerance", type=float, default=DEFAULT_TOLERANCE)
     p.add_argument("--output-dir", default="/opt/ml/processing/output")

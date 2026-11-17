@@ -81,3 +81,38 @@ def test_performance_job_runs_end_to_end_locally(tmp_path):
     ])
     result = json.loads((out / "performance_metrics.json").read_text())
     assert code == 0 and result["matched"] == 1 and result["degraded"] is False
+
+
+def test_actuals_are_built_from_published_months_and_missing_months_are_pending(tmp_path):
+    import requests
+
+    from src.monitoring.live_performance import build_actuals, target_months
+
+    trips = pd.DataFrame(
+        {
+            "tpep_pickup_datetime": pd.to_datetime(["2024-02-29 20:05", "2024-02-29 20:40", "2024-02-29 21:10"]),
+            "PULocationID": [132, 132, 230],
+        }
+    )
+    path = tmp_path / "feb.parquet"
+    trips.to_parquet(path)
+
+    def fake_download(year, month):
+        if (year, month) == (2024, 2):
+            return path
+        response = requests.Response()
+        response.status_code = 403
+        raise requests.HTTPError(response=response)
+
+    captured = _captured([(132, "2024-02-29T20:00:00", 2.0), (230, "2024-03-01T09:00:00", 5.0)])
+    assert target_months(captured) == [(2024, 2), (2024, 3)]
+    actuals, status = build_actuals(target_months(captured), download=fake_download)
+    assert status == {"2024-02": "published", "2024-03": "not published"}
+    counts = actuals.set_index(["PULocationID", "pickup_hour"])["pickup_count"]
+    assert counts[(132, pd.Timestamp("2024-02-29 20:00"))] == 2
+
+    summary = evaluate_live_demand(captured, actuals, {"rmse": 1.0}, actuals_status=status)
+    assert summary["matched"] == 1 and summary["pending"] == 1
+    metric = {m["MetricName"]: m["Value"] for m in cloudwatch_metrics(summary)}
+    assert metric["PendingPredictions"] == 1.0
+

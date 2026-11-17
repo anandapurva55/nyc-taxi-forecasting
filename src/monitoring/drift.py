@@ -34,8 +34,22 @@ DEFAULT_KS_ALPHA = 0.05
 DEFAULT_BINS = 10
 # Features that are category labels (TLC zone IDs), compared by category share.
 DEFAULT_CATEGORICAL = ("PULocationID", "DOLocationID")
+# Calendar features: their mix in live traffic depends on when it was captured
+# (a three-day window has three days of the week). They are compared by category
+# share against the calendar cells, for example (day of week, hour) pairs, inside
+# the capture window, each cell weighted equally. A short window therefore raises
+# no alarm, while traffic piled onto some hours of the window does.
+DEFAULT_CALENDAR = ("hour", "day_of_week")
+# How each calendar feature is derived from an hourly timestamp.
+CALENDAR_FROM_TIMESTAMP = {"hour": lambda ts: ts.hour, "day_of_week": lambda ts: ts.dayofweek}
 # Categories rarer than this share of the reference are pooled into one bucket.
 MIN_CATEGORY_SHARE = 0.005
+# Category PSI is biased upward on small samples (with ~100 zones and 500
+# requests, random noise alone pushes it past 0.2 about a third of the time),
+# while the chi-square test flags trivial differences on large ones. A category
+# feature therefore drifts only when both agree: PSI >= threshold and p below
+# alpha divided by the number of features tested (Bonferroni), so checking many
+# features at once does not multiply false alarms.
 
 
 def population_stability_index(
@@ -98,6 +112,40 @@ def categorical_psi(reference: pd.Series, current: pd.Series) -> float:
     return float(np.sum((cur_pct - ref_pct) * np.log(cur_pct / ref_pct)))
 
 
+def _calendar_key(frame: pd.DataFrame, columns: Sequence[str]) -> pd.Series:
+    return frame[list(columns)].astype(str).agg("|".join, axis=1)
+
+
+def window_cells(window: tuple, columns: Sequence[str]) -> set[str]:
+    """Calendar cells of every hour from ``window[0]`` to ``window[1]`` inclusive."""
+    hours = pd.date_range(pd.Timestamp(window[0]).floor("h"), pd.Timestamp(window[1]).floor("h"), freq="h")
+    return {"|".join(str(CALENDAR_FROM_TIMESTAMP[c](ts)) for c in columns) for ts in hours}
+
+
+def window_matched(
+    reference: pd.DataFrame,
+    current: pd.DataFrame,
+    columns: Sequence[str],
+    window: tuple | None = None,
+) -> pd.DataFrame:
+    """One reference row per calendar cell (all ``columns`` together) inside the window.
+
+    The window is the span of hours the traffic was captured over; without it,
+    the cells that ``current`` contains are used. Keeping one row per cell weights
+    the cells equally, so the result does not depend on how many weeks of each
+    weekday the reference period happens to hold.
+    """
+    columns = list(columns)
+    if not columns:
+        return reference
+    if window is not None and all(c in CALENDAR_FROM_TIMESTAMP for c in columns):
+        cells = window_cells(window, columns)
+    else:
+        cells = set(_calendar_key(current.dropna(subset=columns), columns))
+    ref = reference.dropna(subset=columns).drop_duplicates(subset=columns)
+    return ref[_calendar_key(ref, columns).isin(cells)]
+
+
 def _chi_square(reference: pd.Series, current: pd.Series) -> tuple[float, float]:
     ref_counts, cur_counts = _category_shares(reference, current)
     table = np.vstack([ref_counts, cur_counts])
@@ -113,7 +161,8 @@ class FeatureDrift:
     """Per-feature drift result.
 
     ``statistic``/``pvalue`` come from ``test``: "ks" for numeric features and
-    "chi2" for categorical ones.
+    "chi2" for categorical and calendar ones. Calendar features are compared
+    against the window-matched reference.
     """
 
     feature: str
@@ -216,13 +265,17 @@ def compute_drift(
     ks_alpha: float = DEFAULT_KS_ALPHA,
     bins: int = DEFAULT_BINS,
     categorical: Sequence[str] = DEFAULT_CATEGORICAL,
+    calendar: Sequence[str] = DEFAULT_CALENDAR,
+    window: tuple | None = None,
 ) -> DriftReport:
     """Compare ``current`` against ``reference`` over the given features.
 
     If ``features`` is omitted, the numeric columns common to both frames are
     used. Columns listed in ``categorical`` are compared by category share with a
-    chi-square test; the rest by quantile PSI with a KS test. Raises
-    ``ValueError`` when no comparable features are found.
+    chi-square test, columns in ``calendar`` the same way against the reference
+    cells inside ``window`` (the first and last captured hour), and the rest by
+    quantile PSI with a KS test.
+    Raises ``ValueError`` when no comparable features are found.
     """
     if features is None:
         common = [c for c in reference.columns if c in current.columns]
@@ -232,14 +285,22 @@ def compute_drift(
         raise ValueError("No numeric features in common between reference and current.")
 
     categorical = set(categorical)
+    calendar_cols = [c for c in features if c in set(calendar)]
+    # Bonferroni: the family of tests in this report shares one false-alarm budget.
+    alpha = ks_alpha / max(1, len(features))
+    matched = window_matched(reference, current, calendar_cols, window) if calendar_cols else reference
     results: list[FeatureDrift] = []
     for col in features:
-        if col in categorical:
+        if col in calendar_cols:
+            psi = categorical_psi(matched[col], current[col])
+            stat, pvalue = _chi_square(matched[col], current[col])
+            drifted = psi >= psi_threshold and pvalue < alpha
+            results.append(FeatureDrift(col, psi, stat, pvalue, bool(drifted), "calendar", "chi2"))
+        elif col in categorical:
             psi = categorical_psi(reference[col], current[col])
             stat, pvalue = _chi_square(reference[col], current[col])
-            results.append(
-                FeatureDrift(col, psi, stat, pvalue, bool(psi >= psi_threshold), "categorical", "chi2")
-            )
+            drifted = psi >= psi_threshold and pvalue < alpha
+            results.append(FeatureDrift(col, psi, stat, pvalue, bool(drifted), "categorical", "chi2"))
         else:
             results.append(
                 _numeric_drift(col, reference[col], current[col], bins, psi_threshold)
@@ -251,7 +312,7 @@ def compute_drift(
 def build_evidently_report(reference: pd.DataFrame, current: pd.DataFrame):  # pragma: no cover
     """Build an Evidently data-drift report (HTML-renderable).
 
-    Evidently is an AWS-job-only dependency (see ``requirements-monitoring.txt``);
+    Evidently is an AWS-job-only dependency (the ``aws`` dependency group);
     it is imported lazily so this module stays lightweight for serving/tests.
     """
     try:
@@ -259,7 +320,7 @@ def build_evidently_report(reference: pd.DataFrame, current: pd.DataFrame):  # p
         from evidently.report import Report
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "evidently is not installed; add requirements-monitoring.txt in the job image."
+            "evidently is not installed; install the aws dependency group (uv sync --group aws)."
         ) from exc
 
     report = Report(metrics=[DataDriftPreset()])

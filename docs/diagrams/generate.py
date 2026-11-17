@@ -26,7 +26,7 @@ from diagrams.aws.management import (
     SystemsManagerParameterStore,
 )
 from diagrams.aws.ml import SagemakerModel
-from diagrams.aws.network import ElbApplicationLoadBalancer
+from diagrams.aws.network import CloudFront, ElbApplicationLoadBalancer
 from diagrams.aws.security import IdentityAndAccessManagementIamRole
 from diagrams.aws.storage import SimpleStorageServiceS3Bucket
 from diagrams.generic.storage import Storage
@@ -133,10 +133,13 @@ def aws_architecture() -> None:
             artifacts = SimpleStorageServiceS3Bucket("S3 build inputs\nmlflow.db, mlruns,\ndemand history")
             ecr = ECR("ECR\nAPI, dashboard and\nmonitoring images")
 
+        api_cdn = CloudFront("CloudFront\nHTTPS (API)")
+        dash_cdn = CloudFront("CloudFront\nHTTPS (dashboard)")
+
         with Cluster("Serving path (default VPC, ECS cluster)"):
-            alb = ElbApplicationLoadBalancer("API ALB\nHTTP :80")
+            alb = ElbApplicationLoadBalancer("API ALB\nCloudFront only")
             api = Fargate("API task\nFastAPI + 3 models\n1 vCPU, 2 GB")
-            dash_alb = ElbApplicationLoadBalancer("Dashboard ALB\nHTTP :80")
+            dash_alb = ElbApplicationLoadBalancer("Dashboard ALB\nCloudFront only")
             dash = ElasticContainerServiceService("Dashboard task\nStreamlit")
 
         with Cluster("Monitoring path"):
@@ -162,8 +165,8 @@ def aws_architecture() -> None:
         codebuild >> Edge(label="update service", style="dashed") >> api
         ecr >> Edge(style="dashed", label="pull") >> api
 
-        users >> alb >> api
-        users >> dash_alb >> dash >> Edge(label="REST calls") >> alb
+        users >> api_cdn >> alb >> api
+        users >> dash_cdn >> dash_alb >> dash >> Edge(label="HTTPS REST calls") >> api_cdn
 
         api >> Edge(label="stdout JSON") >> logs >> Edge(label="subscription filter") >> firehose >> capture
         scheduler >> sagemaker
@@ -187,7 +190,7 @@ def release_flow() -> None:
     ):
         dev = Github("git push\nto main")
         with Cluster("AWS CodeBuild (buildspec.yml)"):
-            install = Python("install\nrequirements")
+            install = Python("uv sync --frozen\n(hash-checked)")
             gate = Python("quality gate\nruff + pytest\n(coverage)")
             build = Codebuild("docker build\nself-contained\nAPI image")
         ecr = ECR("ECR\n:<commit> and :latest")

@@ -115,9 +115,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Prometheus /metrics endpoint (monitoring): request count,
-# latency histograms, and in-progress gauges, exposed for scraping.
-Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+# Prometheus /metrics endpoint (monitoring): request count, latency histograms
+# and in-progress gauges. Scrapers send the API key like any other client.
+Instrumentator().instrument(app).expose(
+    app, endpoint="/metrics", include_in_schema=False, dependencies=[Depends(require_api_key)]
+)
 configure_cors(app)
 
 
@@ -178,7 +180,7 @@ def health() -> HealthResponse:
     )
 
 
-@app.get("/version", response_model=VersionResponse)
+@app.get("/version", response_model=VersionResponse, dependencies=[Depends(require_api_key)])
 def version() -> VersionResponse:
     """Which code, models and data this service is running."""
     info: dict = {}

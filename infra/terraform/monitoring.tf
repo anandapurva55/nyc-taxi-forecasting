@@ -478,9 +478,9 @@ resource "aws_scheduler_schedule" "drift" {
 }
 
 # --- EventBridge Scheduler: live demand-accuracy Processing job (weekly) ------
-# Joins captured demand predictions to realised pickup counts uploaded to
-# s3://<monitoring bucket>/<performance_actuals_key> and publishes live RMSE,
-# MAE, WAPE and PerformanceDegraded to CloudWatch (feeding the accuracy alarm).
+# Joins captured demand predictions to realised pickup counts built from the
+# published NYC TLC trip files (var.performance_actuals) and publishes live RMSE,
+# MAE, WAPE, pending predictions and PerformanceDegraded to CloudWatch.
 resource "aws_scheduler_schedule" "performance" {
   count = local.drift_enabled
   name  = "${local.name}-performance"
@@ -502,7 +502,7 @@ resource "aws_scheduler_schedule" "performance" {
         ContainerEntrypoint = ["python3", "scripts/monitoring/run_performance_job.py"]
         ContainerArguments = [
           "--current-s3", "s3://${aws_s3_bucket.monitoring[0].bucket}/captured/",
-          "--actuals", "s3://${aws_s3_bucket.monitoring[0].bucket}/${var.performance_actuals_key}",
+          "--actuals", var.performance_actuals,
           "--output-dir", "/opt/ml/processing/output",
           "--namespace", "TaxiForecasting/Performance",
         ]

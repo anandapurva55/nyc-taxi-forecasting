@@ -1,22 +1,28 @@
 # NYC Taxi Demand and Fare Forecasting: End-to-End MLOps on AWS
 
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
-![AWS](docs/images/badges/aws.svg)
-![Terraform](https://img.shields.io/badge/Terraform-1.9-7B42BC?logo=terraform&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-containers-2496ED?logo=docker&logoColor=white)
+![uv](docs/images/badges/uv.svg)
+![scikit-learn](docs/images/badges/scikit-learn.svg)
+![XGBoost and LightGBM](docs/images/badges/xgboost-lightgbm.svg)
+![Optuna](docs/images/badges/optuna.svg)
 ![MLflow](https://img.shields.io/badge/MLflow-tracking%20%26%20registry-0194E2?logo=mlflow&logoColor=white)
+![SHAP](docs/images/badges/shap.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-serving-009688?logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-169%20passing-brightgreen)
+![Streamlit](docs/images/badges/streamlit.svg)
+![Docker](https://img.shields.io/badge/Docker-containers-2496ED?logo=docker&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-1.9-7B42BC?logo=terraform&logoColor=white)
+![AWS](docs/images/badges/aws.svg)
+![GitHub Actions](docs/images/badges/github-actions.svg)
 
 An end-to-end **MLOps** platform on AWS that forecasts hourly pickup demand across 254 New York City taxi zones and quotes trip fares, built from 3 million NYC TLC trip records.
 
-**XGBoost** and **LightGBM** regressors are tuned with **Optuna**, benchmarked against naive baselines with bootstrap confidence intervals, and versioned in the **MLflow Model Registry**. A **FastAPI** service on **Amazon ECS Fargate** serves three models behind an **Application Load Balancer**, protected by an API key from **AWS Systems Manager Parameter Store**. All 64 cloud resources are defined in **Terraform**. **GitHub Actions** and **AWS CodeBuild** run **Ruff** and **pytest** quality gates, and CodeBuild builds a commit-tagged **Docker** image, pushes it to **Amazon ECR** and rolls out the ECS service. Every prediction streams through **CloudWatch Logs** and **Amazon Data Firehose** into **Amazon S3**, where scheduled **Amazon SageMaker Processing** jobs measure feature drift with **PSI**, **Kolmogorov-Smirnov** and **chi-square** tests and score live accuracy against actual pickups, raising **CloudWatch alarms** through **Amazon SNS**. **SHAP** explanations, subgroup error audits in a versioned S3 data lake with **AWS Glue** and **Amazon Athena**, a **Streamlit** dashboard and a one-command reproducible build complete the system.
+**XGBoost** and **LightGBM** regressors are tuned with **Optuna**, benchmarked against naive baselines with bootstrap confidence intervals, and versioned in the **MLflow Model Registry**. A **FastAPI** service on **Amazon ECS Fargate** serves three models over HTTPS through **Amazon CloudFront** and an **Application Load Balancer**, protected by an API key from **AWS Systems Manager Parameter Store**. All 66 cloud resources are defined in **Terraform**. Dependencies are locked and hash-checked with **uv** and scanned for known vulnerabilities on every build. **GitHub Actions** and **AWS CodeBuild** run **Ruff** and **pytest** quality gates, and CodeBuild builds a commit-tagged **Docker** image, pushes it to **Amazon ECR** and rolls out the ECS service. Every prediction streams through **CloudWatch Logs** and **Amazon Data Firehose** into **Amazon S3**, where scheduled **Amazon SageMaker Processing** jobs measure feature drift with **PSI**, **Kolmogorov-Smirnov** and **chi-square** tests and score live accuracy against actual pickups built from the published TLC files, raising **CloudWatch alarms** through **Amazon SNS**. **SHAP** explanations, subgroup error audits in a versioned S3 data lake with **AWS Glue** and **Amazon Athena**, a **Streamlit** web app for exploring forecasts, fares and explanations, and a one-command reproducible build complete the system.
 
-![Dashboard demo](docs/images/dashboard_demo.gif)
+![Web app demo](docs/images/dashboard_demo.gif)
 
-| **0.962** | **0.968** | **14 ms** | **331 ms** | **64** | **169** |
+| **0.962** | **0.968** | **14 ms** | **373 ms** | **66** | **181** |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| Fare model R² | Demand model R² | Median server latency | p95 end-to-end latency | AWS resources in Terraform | Automated tests |
+| Fare model R² | Demand model R² | Median server latency | p95 end-to-end latency over HTTPS | AWS resources in Terraform | Automated tests |
 
 ---
 
@@ -35,7 +41,7 @@ An end-to-end **MLOps** platform on AWS that forecasts hourly pickup demand acro
 11. [CI/CD and infrastructure on AWS](#cicd-and-infrastructure-on-aws)
 12. [Monitoring: drift and live accuracy](#monitoring-drift-and-live-accuracy)
 13. [Responsible AI](#responsible-ai)
-14. [Dashboard](#dashboard)
+14. [Streamlit web app](#streamlit-web-app)
 15. [Reproducible golden path](#reproducible-golden-path)
 16. [Issues found and fixed](#issues-found-and-fixed)
 17. [Security](#security)
@@ -61,14 +67,15 @@ Models are tuned on a holdout cut from the end of the training period, selected 
 | Data | 3,007,526 raw trips: 3,007,511 valid pickups feed demand, 2,722,931 clean trips (90.5%) feed fares |
 | Multi-hour demand | Over 57 forecast origins, the model wins 1 hour ahead (10.35 against 13.39); from 3 hours ahead the same hour last week is as good or better, so the API switches to it. The served forecast scores 13.81 against 14.77 for the model alone |
 | Backtests | Both models beat their baseline in all 3 rolling folds: demand 11.65 ± 3.14 against 13.35, fare $3.49 ± 0.11 against $4.80 |
-| Quality gate | Ruff clean, 169 tests passing, 92% line coverage, run by GitHub Actions and CodeBuild |
-| Infrastructure | 64 AWS resources from Terraform; API and dashboard ran 1 of 1 tasks |
-| Checks on AWS | 10 of 10 smoke checks and 400 of 400 load-test requests passed; requests without the API key returned 401; requests over the rate limit returned 429 |
-| Latency | 14 ms median server time; p95 331 ms (fare) and 298 ms (demand) end to end |
-| Live accuracy | 315 served demand predictions matched to actual pickups: RMSE 11.60 against the 11.36 test baseline, within tolerance |
-| Drift | Verification traffic covering only Tuesday to Thursday flagged `day_of_week` (PSI 8.17) and raised the drift alarm |
+| Quality gate | Ruff clean, 181 tests passing, 92% line coverage, run by GitHub Actions and CodeBuild |
+| Supply chain | 257 locked packages, hash-checked by uv, 0 known vulnerabilities (pip-audit blocks the build otherwise); Dependabot opens weekly update pull requests |
+| Infrastructure | 66 AWS resources from Terraform; API and web app ran 1 of 1 tasks behind CloudFront |
+| Checks on AWS | 10 of 10 smoke checks and 400 of 400 load-test requests passed over HTTPS; plain HTTP is refused and the load balancers cannot be reached directly; requests without the API key returned 401; a caller rotating a fake `X-Forwarded-For` on every request was still cut off at the rate limit |
+| Latency | 14 ms median server time; p95 373 ms (fare) and 349 ms (demand) end to end over HTTPS |
+| Live accuracy | 500 served demand predictions matched to actual pickups built automatically from the TLC file: RMSE 13.53 against the 11.36 test baseline, within the 20% tolerance |
+| Drift | A three-day window of real traffic no longer raises false alarms: `day_of_week` went from PSI 8.17 to 0.005 after window matching, and zone noise in a 500-request sample is no longer flagged |
 | Responsible AI | WAPE-based subgroup audit of all three models; unknown pickup zones are flagged `low_confidence` in API responses |
-| Reproducibility | One command takes a new, empty copy of the repository to trained, evaluated, served and audited models: 13 of 13 stages in 15 min 10 s |
+| Reproducibility | One command takes a new, empty copy of the repository to trained, evaluated, served and audited models: 13 of 13 stages in 15 min 2 s |
 
 ---
 
@@ -77,23 +84,26 @@ Models are tuned on a holdout cut from the end of the training period, selected 
 | Area | Tools |
 |---|---|
 | Language | Python 3.11 |
-| Data processing | pandas, Parquet (PyArrow) |
+| Data processing | pandas, NumPy, Parquet (PyArrow), `holidays` (US public holidays) |
 | Modelling | XGBoost, LightGBM, scikit-learn |
 | Hyperparameter tuning | Optuna |
-| Experiment tracking and model registry | MLflow |
+| Experiment tracking and model registry | MLflow 3 on SQLite, skops (safe model serialization) |
 | Evaluation | Block bootstrap confidence intervals, rolling-origin backtests, naive forecasting baselines |
-| Explainability and drift | SHAP, Population Stability Index, Kolmogorov-Smirnov and chi-square tests (SciPy) |
-| Serving | FastAPI, Pydantic, Uvicorn, Prometheus instrumentation |
-| Dashboard | Streamlit, Plotly |
-| Packaging | Docker (multi-stage builds, non-root user), Docker Compose, pinned lockfile |
+| Explainability and drift | SHAP, Matplotlib, Population Stability Index, Kolmogorov-Smirnov and chi-square tests (SciPy), Evidently (optional HTML reports) |
+| Serving | FastAPI, Pydantic, Uvicorn, Prometheus instrumentation, SQLite (batch forecasts) |
+| Web app | Streamlit, Plotly |
+| Configuration | YAML (PyYAML), environment overrides (python-dotenv) |
+| Packaging | uv (hash-checked lockfile), Docker (multi-stage builds, non-root user), Docker Compose |
 | Infrastructure as code | Terraform |
-| Compute and networking | Amazon ECS on Fargate, Application Load Balancer, Amazon VPC |
-| Delivery | GitHub Actions, GitHub webhooks, AWS CodeBuild, Amazon ECR |
-| Monitoring | Amazon CloudWatch Logs, metrics and alarms, Amazon Data Firehose, Amazon SNS |
-| ML operations | Amazon SageMaker Processing, Amazon EventBridge Scheduler |
+| Compute and networking | Amazon ECS on Fargate, Application Load Balancer, Amazon CloudFront (HTTPS), Amazon VPC |
+| Delivery | GitHub Actions, Dependabot, GitHub webhooks, AWS CodeBuild, Amazon ECR |
+| Monitoring | Amazon CloudWatch Logs, metrics, alarms and dashboard, Amazon Data Firehose, Amazon SNS |
+| ML operations | Amazon SageMaker Processing, SageMaker Pipelines (gated retraining definition), Amazon EventBridge Scheduler, boto3, SageMaker Python SDK |
 | Storage and analytics | Amazon S3 with versioning, AWS Glue Data Catalog, Amazon Athena |
 | Security | AWS IAM (one role per service), AWS Systems Manager Parameter Store, VPC security groups, Amazon ECR image scanning |
-| Quality | pytest with coverage, Ruff |
+| Operations | AWS Resource Groups (every resource tagged and listed in one group) |
+| Quality | pytest with coverage, Ruff, pip-audit |
+| Notebooks and docs | Jupyter, `diagrams` with Graphviz (architecture diagrams generated from code) |
 
 ---
 
@@ -105,7 +115,7 @@ The system is split into three paths, each with one job:
 
 | Path | Question it answers | Services |
 |---|---|---|
-| **Serving** | Who answers the customer? | Application Load Balancer → ECS service → Fargate task running FastAPI with all three models in memory |
+| **Serving** | Who answers the customer? | CloudFront (HTTPS) → Application Load Balancer → ECS service → Fargate task running FastAPI with all three models in memory |
 | **Release** | Who ships a change? | GitHub Actions and a CodeBuild webhook (lint, tests) → Docker build → ECR → ECS rolling update |
 | **Evidence** | Who records what happened? | CloudWatch Logs → Data Firehose → S3 → SageMaker Processing (drift and live accuracy) → CloudWatch metrics and alarms → SNS email |
 
@@ -135,6 +145,10 @@ All diagrams are generated from code in [docs/diagrams/generate.py](docs/diagram
 
 **Compare subgroups on relative error.** Raw RMSE grows with volume, so busy Manhattan always looked "worst". The audit compares groups on WAPE (total absolute error over total actual) and leaves out groups with almost no volume, where WAPE is unstable.
 
+**Make drift alarms honest about sample size.** Two drift checks raised false alarms on real traffic. Hour and day of week depend on when traffic was captured, so a three-day window always looked shifted; they are now compared with the hours inside the capture window. Category PSI is biased upward on small samples: in 20 random 500-trip samples with no drift, it crossed 0.2 six times. A category feature now drifts only when the change is both large (PSI) and statistically significant (chi-square, Bonferroni-corrected), which brought false alarms to 0 in 40 trials while still catching a 10% shift.
+
+**Lock dependencies and audit every build.** A scan of the original pinned packages found 191 known vulnerabilities, including 81 in MLflow. **uv** now resolves every dependency group into one hash-checked lockfile, CI fails if the lockfile is stale or any locked package has a known vulnerability, and Dependabot proposes updates weekly. The upgrade to MLflow 3 kept every registered model: all three return identical predictions on 5,000 test rows each.
+
 **Treat an alarm as the start of an investigation.** Alarms email a person. Nothing retrains or redeploys automatically, because a new model must pass the same evaluation and quality gate as the current one before it ships.
 
 ---
@@ -161,7 +175,7 @@ The data has no rider names or demographic fields. Zones and boroughs are geogra
 
 ## Quick start
 
-Requirements: **Python** 3.11, Git and, on macOS, `brew install libomp` for **XGBoost** and **LightGBM**.
+Requirements: [**uv**](https://docs.astral.sh/uv/getting-started/installation/), which also installs **Python** 3.11 when it is missing, Git and, on macOS, `brew install libomp` for **XGBoost** and **LightGBM**.
 
 ```bash
 git clone https://github.com/anandapurva55/nyc-taxi-forecasting.git
@@ -169,7 +183,7 @@ cd nyc-taxi-forecasting
 bash scripts/golden_path.sh
 ```
 
-This one command builds the environment from the pinned lockfile, runs lint and tests, downloads and processes the data, trains and registers all three models, evaluates them against baselines, runs batch inference, starts the API and checks every endpoint, and produces the responsible AI and drift reports. See [Reproducible golden path](#reproducible-golden-path) for the result. On Windows, run each command from the sections below with `.\.venv\Scripts\python.exe` in place of `.venv/bin/python`.
+This one command builds the environment from `uv.lock` (`uv sync --frozen`), runs lint and tests, downloads and processes the data, trains and registers all three models, evaluates them against baselines, runs batch inference, starts the API and checks every endpoint, and produces the responsible AI and drift reports. See [Reproducible golden path](#reproducible-golden-path) for the result. On Windows, run each command from the sections below with `.\.venv\Scripts\python.exe` in place of `.venv/bin/python`.
 
 ---
 
@@ -240,7 +254,7 @@ Runs **Optuna** hyperparameter search for **XGBoost** and **LightGBM** on each o
 1. **Optuna** runs 25 trials per candidate over the number of trees, tree depth, learning rate, row and column sampling, minimum leaf size and L2 regularisation ([src/models/tuning.py](src/models/tuning.py)). Trials are scored on the last 15% of the training period, never on validation data.
 2. Each tuned candidate is fitted on the full training split and scored on validation. A paired block bootstrap on the validation difference ([src/models/uncertainty.py](src/models/uncertainty.py)) records whether the winner is clearly better.
 3. The winner is refitted on training and validation data and scored once on test, with a 95% block-bootstrap interval resampled by hour.
-4. The final model is registered as `taxi-demand-forecaster`, `taxi-fare-predictor` or `taxi-fare-booking`, the `champion` alias is moved to it, and its test metrics are written to [config/performance_baseline.json](config/performance_baseline.json) for live monitoring. SHAP plots and a model card are logged with it.
+4. The final model is saved in MLflow's **skops** format, which loads only types the project explicitly trusts (XGBoost, LightGBM, scikit-learn and NumPy), and registered as `taxi-demand-forecaster`, `taxi-fare-predictor` or `taxi-fare-booking`. The `champion` alias is moved to it, and its test metrics are written to [config/performance_baseline.json](config/performance_baseline.json) for live monitoring. SHAP plots and a model card are logged with it.
 
 **Commands**
 
@@ -326,7 +340,7 @@ The **FastAPI** app ([src/serving/api.py](src/serving/api.py)) loads the `champi
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Readiness: model flags, history hours and zone count |
+| GET | `/health` | Readiness: model flags, history hours and zone count (no key needed) |
 | GET | `/version` | Build commit, exact model versions and run IDs, input file hashes |
 | POST | `/predict/fare` | Fare for one trip |
 | POST | `/predict/demand` | Pickups for one zone and hour |
@@ -334,7 +348,7 @@ The **FastAPI** app ([src/serving/api.py](src/serving/api.py)) loads the `champi
 | POST | `/explain/fare` | SHAP contributions for one fare prediction |
 | POST | `/explain/demand` | SHAP contributions for one demand prediction |
 | GET | `/metrics` | Prometheus metrics |
-| GET | `/docs` | Swagger UI |
+| GET | `/docs` | Swagger UI, with an Authorize button for the API key |
 
 **Commands**
 
@@ -351,7 +365,7 @@ curl -X POST "$API_URL/forecast/demand" -H "Content-Type: application/json" \
   -d '{"horizon_hours": 3, "zones": [132, 161, 230]}'
 ```
 
-Set `API_KEY` before starting the server to require an `X-API-Key` header on every prediction, forecast and explanation request, and `RATE_LIMIT_PER_MINUTE` to cap requests per client.
+Set `API_KEY` before starting the server to require an `X-API-Key` header on every endpoint except `/health` and `/docs`, and `RATE_LIMIT_PER_MINUTE` to cap requests per client. `TRUSTED_PROXY_HOPS` tells the rate limiter how many proxies append to `X-Forwarded-For`, so it reads the client address those proxies recorded and ignores whatever the client claims.
 
 To run the API in **Docker** instead:
 
@@ -362,14 +376,14 @@ docker compose -f docker/docker-compose.yml up --build
 
 **Results**
 
-Recorded from the AWS deployment:
+Recorded from the AWS deployment, over HTTPS:
 
 ```bash
 $ curl "$API_URL/health"
 {"status":"ok","demand_model_loaded":true,"fare_model_loaded":true,"fare_booking_model_loaded":true,"history_hours":696,"zones":254}
 
-$ curl "$API_URL/version"
-{"git_commit":"prerelease-20261117b","models":{
+$ curl -H "X-API-Key: $API_KEY" "$API_URL/version"
+{"git_commit":"prerelease-uv","models":{
   "demand":{"name":"taxi-demand-forecaster","version":2,"reference":"champion"},
   "fare":{"name":"taxi-fare-predictor","version":2,"reference":"champion"},
   "fare_booking":{"name":"taxi-fare-booking","version":1,"reference":"champion"}},
@@ -380,13 +394,13 @@ A fare request for JFK Airport to Times Square, 17 miles at 18:30, returns **$69
 
 The batch run wrote **762 forecasts (254 zones x 3 hours)** to `predictions.db`: 508 from the model and 254 from the weekly rule, each row stamped with `taxi-demand-forecaster/2`.
 
-**Latency.** The load balancer measured a median server response time of **14 ms**. End-to-end latency is dominated by the network distance to `us-east-1`: from the test machine one round trip takes about 270 ms. Clients reuse HTTP connections, which removes a second round trip for the TCP handshake.
+**Latency.** The load balancer measured a median server response time of **14 ms**. End-to-end latency is dominated by the network distance to `us-east-1`: from the test machine one round trip takes about 270 ms. Clients reuse HTTPS connections, which avoids repeating the TCP and TLS handshakes.
 
-| Endpoint (on AWS, 100 requests, 10 concurrent) | Failed | p50 | p95 | Target |
+| Endpoint (on AWS over HTTPS, 100 requests, 10 concurrent) | Failed | p50 | p95 | Target |
 |---|---|---|---|---|
-| Fare prediction | 0 | 300 ms | 331 ms | 500 ms, met |
-| Demand prediction | 0 | 274 ms | 298 ms | 500 ms, met |
-| Dashboard | 0 | 272 ms | 538 ms | 3,000 ms, met |
+| Fare prediction | 0 | 290 ms | 373 ms | 500 ms, met |
+| Demand prediction | 0 | 261 ms | 349 ms | 500 ms, met |
+| Web app | 0 | 276 ms | 673 ms | 3,000 ms, met |
 
 More request examples are in [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md).
 
@@ -394,20 +408,21 @@ More request examples are in [docs/API_EXAMPLES.md](docs/API_EXAMPLES.md).
 
 ## CI/CD and infrastructure on AWS
 
-Provisions the full AWS footprint with **Terraform** and the AWS provider 5.x. **GitHub Actions** runs **Ruff**, **pytest** with coverage, and `terraform fmt` and `validate` on every push to `main` and every pull request. Every push to `main` also triggers **AWS CodeBuild**, which runs the same gate, builds a self-contained **Docker** image tagged with the commit, pushes it to **Amazon ECR** and performs a rolling update on **Amazon ECS Fargate**.
+Provisions the full AWS footprint with **Terraform** and the AWS provider 5.x. **GitHub Actions** checks that `uv.lock` matches `pyproject.toml`, runs **Ruff**, **pytest** with coverage, a **pip-audit** scan of every locked package, and `terraform fmt` and `validate` on every push to `main` and every pull request. A weekly workflow downloads the real February 2024 data and runs the real-data tests, which skip in the main job. **Dependabot** opens weekly pull requests for Python packages, GitHub Actions, Docker base images and Terraform providers. Every push to `main` also triggers **AWS CodeBuild**, which runs the same gate, builds a self-contained **Docker** image tagged with the commit, pushes it to **Amazon ECR** and performs a rolling update on **Amazon ECS Fargate**.
 
 ![CI/CD release flow](docs/images/cicd_release.png)
 
 | Terraform file | Resources |
 |---|---|
 | `main.tf` | ECR repository with a 20-image lifecycle rule, ECS cluster, Fargate task definition and service (1 vCPU, 2 GB), Application Load Balancer, security groups, log group, IAM roles, API key in Parameter Store |
+| `cdn.tf` | CloudFront distributions that serve the API and web app over HTTPS; the load balancers accept traffic only from CloudFront |
 | `cicd.tf` | CodeBuild project, GitHub credential and webhook, S3 bucket for build inputs, CodeBuild IAM role |
 | `monitoring.tf` | Firehose capture stream, S3 monitoring bucket, log subscription filter, SageMaker role, drift and live accuracy schedules, CloudWatch alarms and dashboard, SNS email topic |
 | `dashboard.tf` | Dashboard ECR repository, ECS service and load balancer |
 | `datalake.tf` | Versioned S3 data lake, Glue catalog database, Athena workgroup |
 | `resource_group.tf` | One AWS Resource Group listing every resource in the project |
 
-[buildspec.yml](buildspec.yml) runs in **CodeBuild**. The `pre_build` phase runs `ruff check .` and `pytest` with coverage, and any failure stops the release. The `build` phase downloads the model artifacts from S3, records build provenance, builds the image, tags it `git-<commit>` and pushes it to **ECR**. The `post_build` phase starts an **ECS** rolling update. Pull requests and other branches run the quality gate and never deploy. A manual build deploys only when started with `DEPLOY_MANUAL=true`.
+[buildspec.yml](buildspec.yml) runs in **CodeBuild**. The `install` phase runs `uv sync --frozen`. The `pre_build` phase runs `ruff check .` and `pytest` with coverage, and any failure stops the release. The `build` phase downloads the model artifacts from S3, records build provenance, builds the image, tags it `git-<commit>` and pushes it to **ECR**. The `post_build` phase starts an **ECS** rolling update. Pull requests and other branches run the quality gate and never deploy. A manual build deploys only when started with `DEPLOY_MANUAL=true`.
 
 **Deployment steps.** The first deployment runs in a fixed order, because **ECS** needs an image before it can start and **CodeBuild**, which builds that image, is itself created by **Terraform**. Infrastructure comes up with zero running tasks, the three images are built, and the services then scale to one task each.
 
@@ -441,6 +456,8 @@ Provisions the full AWS footprint with **Terraform** and the AWS provider 5.x. *
    terraform -chdir=infra/terraform apply -var-file=prod.tfvars -var desired_count=0 -var dashboard_desired_count=0
    ```
 
+   HTTPS is on by default (`enable_https = true`): Terraform creates the CloudFront distributions, and the `api_url` and `dashboard_url` outputs are HTTPS addresses.
+
 3. **Upload the model artifacts** that **CodeBuild** bakes into the API image.
 
    ```bash
@@ -458,7 +475,7 @@ Provisions the full AWS footprint with **Terraform** and the AWS provider 5.x. *
      --environment-variables-override name=DEPLOY_MANUAL,value=true
    ```
 
-5. **Build the dashboard image** in **CodeBuild** with its report files.
+5. **Build the web app image** in **CodeBuild** with its report files.
 
    ```bash
    aws s3 sync artifacts/responsible "s3://$BUCKET/dashboard/responsible"
@@ -507,7 +524,16 @@ terraform -chdir=infra/terraform destroy -var-file=prod.tfvars -var monitoring_i
 
 After the first deployment, every push to `main` rebuilds and redeploys the API automatically.
 
-**Results.** The release build passed every phase, both **ECS** services ran 1 of 1 tasks, and the smoke test on AWS passed 10 of 10 checks with the API key. Requests without the key, or with a wrong key, returned 401.
+**Results.** The release build passed every phase, both **ECS** services ran 1 of 1 tasks, and the smoke test on AWS passed 10 of 10 checks over HTTPS with the API key.
+
+| Access check on AWS | Result |
+|---|---|
+| API and web app over HTTPS | 200 |
+| API over plain HTTP | 403, refused by CloudFront |
+| Web app over plain HTTP | 301, redirected to HTTPS |
+| Load balancer reached directly | No connection: it accepts CloudFront only |
+| Prediction, `/version` or `/metrics` without the key | 401 |
+| Rate limit of 10 per minute, with a new fake `X-Forwarded-For` on every request | 10 accepted, then 429 |
 
 <details>
 <summary>CodeBuild release build: all phases succeeded (click here to expand)</summary>
@@ -515,11 +541,13 @@ After the first deployment, every push to `main` rebuilds and redeploys the API 
 | CodeBuild phase | Status | Seconds |
 |---|---|---|
 | PROVISIONING | SUCCEEDED | 7 |
-| DOWNLOAD_SOURCE | SUCCEEDED | 2 |
-| INSTALL: pinned dependencies | SUCCEEDED | 89 |
-| PRE_BUILD: Ruff and pytest | SUCCEEDED | 17 |
-| BUILD: Docker build and ECR push | SUCCEEDED | 193 |
+| DOWNLOAD_SOURCE | SUCCEEDED | 1 |
+| INSTALL: `uv sync --frozen` | SUCCEEDED | 49 |
+| PRE_BUILD: Ruff and pytest | SUCCEEDED | 37 |
+| BUILD: Docker build and ECR push | SUCCEEDED | 219 |
 | POST_BUILD: ECS rolling update | SUCCEEDED | 1 |
+
+Switching the install from pip to uv cut the `INSTALL` phase from 89 to 49 seconds.
 
 </details>
 
@@ -551,7 +579,7 @@ After the first deployment, every push to `main` rebuilds and redeploys the API 
 | | |
 |---|---|
 | ![CodeBuild build history](docs/images/console/codebuild_history.png) **CodeBuild build history:** webhook builds per commit, all succeeded after the first gate failure | ![CodeBuild phase details](docs/images/console/codebuild_phases.png) **CodeBuild phases:** install, quality gate, Docker build and ECS update |
-| ![ECS services](docs/images/console/ecs_services.png) **Amazon ECS:** API and dashboard services, 1 of 1 tasks each | ![ECR repositories](docs/images/console/ecr_repositories.png) **Amazon ECR:** API and dashboard image repositories, AES-256 encrypted |
+| ![ECS services](docs/images/console/ecs_services.png) **Amazon ECS:** API and web app services, 1 of 1 tasks each | ![ECR repositories](docs/images/console/ecr_repositories.png) **Amazon ECR:** API and dashboard image repositories, AES-256 encrypted |
 
 ---
 
@@ -561,8 +589,13 @@ Captures every live prediction asynchronously through **CloudWatch Logs**, a sub
 
 1. The API writes one JSON line per prediction to standard output ([src/monitoring/capture.py](src/monitoring/capture.py)), with the exact model version and, for demand, the zone, target hour and serving `method`.
 2. **ECS** sends that output to **CloudWatch Logs**. A **subscription filter** forwards prediction events to **Amazon Data Firehose**, which writes them to the **S3 monitoring bucket** under `captured/`.
-3. **Drift.** [scripts/monitoring/run_drift_job.py](scripts/monitoring/run_drift_job.py) compares captured inputs with the training data ([src/monitoring/drift.py](src/monitoring/drift.py)): **PSI** and the **Kolmogorov-Smirnov** test for numeric inputs, category-share **PSI** and a **chi-square** test for zones, and the same checks on the predictions. A feature drifts when its PSI is above **0.2**. The job publishes `FeaturesDrifted`, and an alarm on it emails the team.
-4. **Live accuracy.** [scripts/monitoring/run_performance_job.py](scripts/monitoring/run_performance_job.py) joins captured demand predictions to the actual hourly counts (`actuals/demand_hourly.parquet`, the pipeline's demand table uploaded once a month's trip data is published), computes live RMSE, MAE and WAPE ([src/monitoring/live_performance.py](src/monitoring/live_performance.py)) and compares them with the test baseline in [config/performance_baseline.json](config/performance_baseline.json). Hours served by the weekly rule are excluded, so the model is compared like for like. A 20% rise raises `PerformanceDegraded` and its alarm.
+3. **Drift.** [scripts/monitoring/run_drift_job.py](scripts/monitoring/run_drift_job.py) compares captured inputs with the training data ([src/monitoring/drift.py](src/monitoring/drift.py)):
+   - Numeric inputs and predictions: quantile **PSI**, drifting above **0.2**, with the **Kolmogorov-Smirnov** test reported alongside.
+   - Zones: category-share **PSI** and a **chi-square** test. They drift only when both agree: PSI above 0.2 and a p-value below 0.05 divided by the number of features tested (Bonferroni), because category PSI alone is inflated by small samples.
+   - Hour and day of week: the same category test, against the training hours that fall inside the capture window, with each hour weighted equally. A short window is not drift; traffic piled onto some hours of the window is.
+
+   The job publishes `FeaturesDrifted`, and an alarm on its daily maximum emails the team.
+4. **Live accuracy.** [scripts/monitoring/run_performance_job.py](scripts/monitoring/run_performance_job.py) finds the months the captured demand predictions are for, downloads those months' trip files from the TLC, builds hourly counts with the training pipeline's own code, and joins them to the predictions ([src/monitoring/live_performance.py](src/monitoring/live_performance.py)). It computes live RMSE, MAE and WAPE and compares them with the test baseline in [config/performance_baseline.json](config/performance_baseline.json). Hours served by the weekly rule are excluded, so the model is compared like for like. A 20% rise raises `PerformanceDegraded` and its alarm. The TLC publishes each month about two months after it ends, so predictions for later months are reported as `PendingPredictions` and scored on a later run.
 5. A third alarm watches API 5xx errors.
 
 **Commands.** [scripts/aws/replay_traffic.py](scripts/aws/replay_traffic.py) sends real held-out February trips and zone-hours through the live API. The `--distance-factor` option multiplies trip distances to simulate a real change in traffic.
@@ -574,14 +607,14 @@ Captures every live prediction asynchronously through **CloudWatch Logs**, a sub
 
 **Firehose** delivers the captured requests within 5 minutes. The jobs then run on their weekly schedules, or on demand from each schedule's own job definition.
 
-**Results: live accuracy.** After the replay, the job matched 315 distinct served demand predictions to actual pickups:
+**Results: live accuracy.** The job on SageMaker downloaded the February 2024 TLC file itself, built the hourly counts and matched every one of 500 replayed demand predictions:
 
 | Metric | Live | Test baseline | Change | Degraded |
 |---|---|---|---|---|
-| RMSE | 11.60 | 11.36 | +2.0% | no |
-| MAE | 3.99 | 3.49 | +14.4% | no |
+| RMSE | 13.53 | 11.36 | +19.0% | no |
+| MAE | 3.75 | 3.49 | +7.6% | no |
 
-`PerformanceDegraded = 0` and the accuracy alarm stayed **OK**.
+`PerformanceDegraded = 0`, `PendingPredictions = 0` and the accuracy alarm stayed **OK**. 500 predictions give a noisy estimate: the test RMSE's own 95% interval is 9.76 to 13.05. An earlier run on 315 different predictions measured 11.60.
 
 **Results: drift.**
 
@@ -589,9 +622,10 @@ Captures every live prediction asynchronously through **CloudWatch Logs**, a sub
 |---|---|---|---|
 | Real traffic (first deployment) | 1,000 random test-split trips | 0 of 5 fare inputs (largest PSI 0.019) | alarm **OK** |
 | Shifted traffic (first deployment) | Same trips, distance x 3 | 1 of 5: `trip_distance`, PSI **1.90** | alarm **ALARM**, email delivered |
-| Verification traffic | Test-split trips and zone-hours from 27 to 29 February, plus 100 repeated load-test requests | Demand: `day_of_week` (PSI **8.17**) and `hour` (PSI 0.49); fare: `PULocationID` (PSI 0.20) | alarm **ALARM** |
+| Verification traffic, before the fixes | Test-split trips and zone-hours from 27 to 29 February, plus 100 repeated load-test requests | Demand: `day_of_week` (PSI **8.17**) and `hour` (PSI 0.49); fare: `PULocationID` (PSI 0.20) | alarm **ALARM** |
+| Verification traffic, after the fixes | 500 test-split trips and 500 zone-hours from the same window | 0 of 2 demand and 0 of 5 fare features: `day_of_week` PSI 0.005; `DOLocationID` PSI 0.21 but p = 0.04, not significant across 5 tests | no drift reported |
 
-The verification run shows the drift check doing its job: the replayed traffic covered only Tuesday to Thursday, while training covered every day of the week, and the load test repeated one pickup zone 100 times. Trip distance, duration and the fare predictions stayed stable.
+The first verification run exposed two false alarms rather than real drift. The replayed traffic covered only Tuesday to Thursday, while training covered every day of the week, and 500 trips spread over about 100 zones push category PSI up by chance. The fixes are described in [Engineering decisions](#engineering-decisions). The CloudWatch alarm takes the day's maximum, so it returns to OK once a day passes without drift.
 
 An offline drift drill, [scripts/monitoring/demo_drift_report.py](scripts/monitoring/demo_drift_report.py), checks every model feature without AWS. It flagged `lag_1` and `lag_24` (**PSI** 13.45 and 13.61) out of 20 demand features and `PULocationID` and `DOLocationID` (PSI 12.38 and 10.69) out of 16 fare features, exactly the features it shifted.
 
@@ -687,9 +721,9 @@ The evidence script publishes the subgroup reports, **SHAP** summaries and model
 
 ---
 
-## Dashboard
+## Streamlit web app
 
-A **Streamlit** application running as its own **ECS** **Fargate** service behind its own load balancer. It calls the live API with the API key for predictions, forecasts and **SHAP** explanations, and renders the model cards, subgroup reports and drift reports with **Plotly**.
+A **Streamlit** application running as its own **ECS** **Fargate** service behind its own load balancer and CloudFront distribution, served over HTTPS. It calls the live API with the API key for predictions, forecasts and **SHAP** explanations, and renders the model cards, subgroup reports and drift reports with **Plotly**.
 
 | Page | Shows |
 |---|---|
@@ -703,11 +737,11 @@ A **Streamlit** application running as its own **ECS** **Fargate** service behin
 **Commands**
 
 ```bash
-.venv/bin/python -m pip install -r requirements-dashboard.txt
+uv sync --frozen --group dashboard
 API_BASE_URL=http://127.0.0.1:8000 .venv/bin/python -m streamlit run dashboard/app.py --server.port 8501
 ```
 
-On AWS the dashboard runs as its own **ECS** service behind its own load balancer, reads the API key from Parameter Store and calls the API load balancer.
+On AWS the web app runs as its own **ECS** service behind its own load balancer and CloudFront, reads the API key from Parameter Store and calls the API over HTTPS.
 
 **Results.** Screenshots taken from the AWS deployment.
 
@@ -731,27 +765,27 @@ A single Bash entry point rebuilds the whole project from a new, empty copy of t
 bash scripts/golden_path.sh
 ```
 
-**Results.** Run on a new, empty copy of the repository, with no data, models or environment carried over: **13 of 13 stages passed in 15 minutes 10 seconds.**
+**Results.** Run on a new, empty copy of the repository, with no data, models or environment carried over: **13 of 13 stages passed in 15 minutes 2 seconds**, starting from an empty uv cache.
 
 <details>
 <summary>Stage-by-stage result (click here to expand)</summary>
 
 | Stage | What it proves | Status | Seconds |
 |---|---|---|---|
-| 01 environment | Python 3.11 environment builds from the pinned lockfile | ok | 36 |
-| 02 lint | Ruff passes | ok | 0 |
-| 03 tests | All unit and integration tests pass | ok | 46 |
+| 01 environment | `uv sync --frozen` builds the Python 3.11 environment from `uv.lock` | ok | 30 |
+| 02 lint | Ruff passes | ok | 1 |
+| 03 tests | All unit and integration tests pass | ok | 54 |
 | 04 data pipeline | February 2024 data downloads, cleans and splits | ok | 10 |
 | 05 pipeline outputs | Summary, demand history and all six split files exist | ok | 0 |
 | 06 real data checks | On the real data: raw schema, chronological splits, lags that use only past hours, and pickup counts that keep trips the fare rules drop | ok | 1 |
-| 07 train and register | All three problems tune, train and register a champion | ok | 366 |
-| 08 evaluation | Baselines, multi-hour accuracy and booking-time fares are scored | ok | 389 |
-| 09 batch inference | Routed forecasts are written to `predictions.db` | ok | 6 |
+| 07 train and register | All three problems tune, train and register a champion | ok | 370 |
+| 08 evaluation | Baselines, multi-hour accuracy and booking-time fares are scored | ok | 375 |
+| 09 batch inference | Routed forecasts are written to `predictions.db` | ok | 9 |
 | 10 API smoke test | API starts, `/health` is ok, every endpoint passes, invalid input is rejected | ok | 6 |
-| 11 responsible AI | SHAP and subgroup reports and model cards are written | ok | 32 |
-| 12 drift report | Drift detection flags the shifted features | ok | 18 |
+| 11 responsible AI | SHAP and subgroup reports and model cards are written | ok | 30 |
+| 12 drift report | Drift detection flags the shifted features | ok | 16 |
 | 13 final outputs | Every expected artifact exists | ok | 0 |
-| **Total** | | **13 of 13** | **910 (15 min 10 s)** |
+| **Total** | | **13 of 13** | **902 (15 min 2 s)** |
 
 </details>
 
@@ -764,9 +798,9 @@ Real problems found while building, evaluating and deploying this system, and ho
 | # | Symptom | Cause | Fix | Proof |
 |---|---|---|---|---|
 | 1 | `pip install` failed building LightGBM on macOS | The OpenMP runtime `libomp` was missing, so LightGBM compiled from source and failed to link | Installed `libomp` with Homebrew | LightGBM and XGBoost import and train |
-| 2 | An MLflow test failed with `ImportError: FallbackAsyncAdaptedQueuePool` | SQLAlchemy 2.1 removed a class MLflow imports, and SQLAlchemy was not pinned | Pinned `sqlalchemy<2.1`, then pinned every dependency in `requirements.lock` | All tests pass locally, in GitHub Actions and in CodeBuild |
+| 2 | An MLflow test failed with `ImportError: FallbackAsyncAdaptedQueuePool` | SQLAlchemy 2.1 removed a class MLflow imports, and SQLAlchemy was not pinned | Pinned `sqlalchemy<2.1`; every dependency is now locked in `uv.lock` | All tests pass locally, in GitHub Actions and in CodeBuild |
 | 3 | The first CodeBuild release stopped at `PRE_BUILD` | Ruff rule `I001`: unsorted imports | Sorted the imports and pushed; the webhook started a new build | The gate blocked the commit before any image was built |
-| 4 | Load-test p95 was 726 ms against a 500 ms target | Every request opened a new TCP connection, paying an extra network round trip | Reused HTTP connections in the load test and the dashboard client | p95 dropped to 331 ms (fare) and 298 ms (demand) |
+| 4 | Load-test p95 was 726 ms against a 500 ms target | Every request opened a new TCP connection, paying an extra network round trip | Reused HTTP connections in the load test and the web app client | p95 dropped to 331 ms (fare) and 298 ms (demand); 373 and 349 ms after adding HTTPS |
 | 5 | The AWS drift job silently skipped pickup and drop-off zones | Captured requests use API names (`pu_location_id`), the reference uses training names (`PULocationID`) | Mapped captured names to feature names, with a unit test | Zone features appear in every fare drift report |
 | 6 | The drift job failed with `NoRegionError`, so the drift alarm could never fire | SageMaker Processing containers start without an AWS region, which CloudWatch needs | Set `AWS_DEFAULT_REGION` in the Terraform job definition | Metrics published and the alarm fired on shifted traffic |
 | 7 | The `--fail-on-drift` flag could never be turned off | The flag used `store_true` with a default of `True` | Switched to an on and off flag pair and pass `--no-fail-on-drift` on schedule | Drift runs complete and report drift through the alarm |
@@ -776,15 +810,24 @@ Real problems found while building, evaluating and deploying this system, and ho
 | 11 | `/predict/demand` for a future hour treated every unknown recent hour as zero pickups | Lag features were filled with zeros past the end of the history | Single predictions follow the same horizon routing as forecasts | Unit tests compare single predictions with the forecast |
 | 12 | The fairness audit always flagged Manhattan, with a ratio of 352 | RMSE grows with volume, so the busiest borough always looked worst | Compare groups on WAPE and leave out groups with almost no volume | Demand borough ratio 1.80, with the worst group now the unknown zone |
 | 13 | Optuna tuned and selected on the same validation data | Selection was made on scores the tuning had already optimised | Tune on a holdout from the end of the training period and record a bootstrap interval on the validation margin | The demand tie is recorded instead of hidden |
+| 14 | A dependency scan found 191 known vulnerabilities in 10 packages, 81 of them in MLflow | Versions were pinned once and never audited | Moved to a **uv** lockfile, upgraded to patched releases including MLflow 3, and made **pip-audit** a blocking CI step | 0 known vulnerabilities in 257 locked packages; all three models give identical predictions after the upgrade |
+| 15 | Any caller could reset their rate limit by sending a new `X-Forwarded-For` header | The limiter read the first address in the header, which the client controls, and never forgot old clients | Read the address the outermost trusted proxy recorded and drop idle clients each minute | On AWS, a new fake header on every request was still cut off at the limit |
+| 16 | The registry baked into the image still pointed at paths on the training machine | The path-rewriting script only matched Windows `file://` URIs, not macOS and Linux paths, so it changed 0 paths; serving worked only through a fallback | Match both forms, including MLflow 3's logged-model table, with a regression test | 26 paths rewritten; the container loads every model directly |
+| 17 | Training new models failed after the MLflow 3 upgrade | MLflow 3 saves models with skops, which refuses types it was not told to trust | Trust only types from XGBoost, LightGBM, scikit-learn and NumPy, and refuse anything else | The golden path trains and registers all three models; a container built from them serves correctly |
+| 18 | One test wrote a model into the project's real MLflow registry | MLflow 3 defaults to `sqlite:///mlflow.db` in the working directory | The test session now points MLflow at a temporary store | The registry file is byte-identical before and after the full test run |
+| 19 | Real traffic from a three-day window raised the drift alarm | Hour and day of week were compared as numbers against all of training | Compare them by category against the hours inside the capture window | `day_of_week` PSI fell from 8.17 to 0.005 on the same kind of traffic |
+| 20 | 500 random trips with no drift crossed the zone PSI threshold 6 times in 20 | Category PSI is inflated by small samples | Require a significant chi-square test as well, Bonferroni-corrected | 0 false alarms in 40 trials; a 10% shift is still caught |
 
 ---
 
 ## Security
 
-- **API key.** Prediction, forecast and explanation endpoints require an `X-API-Key` header, checked in constant time. On AWS the key is a `SecureString` in **Systems Manager Parameter Store**, injected into the API and dashboard tasks by **ECS**, and never stored in the image or in Git.
-- **Rate limiting.** Each client is limited to a configured number of requests per minute, returning HTTP 429 with `Retry-After`. Cross-origin requests are refused unless origins are listed explicitly.
+- **HTTPS only.** **CloudFront** serves the API and web app over TLS with its default certificate. Plain HTTP to the API is refused, the web app redirects to HTTPS, and the load balancers accept traffic only from CloudFront's origin-facing addresses, so the API key never crosses the internet unencrypted.
+- **API key.** Every endpoint except `/health` and `/docs` requires an `X-API-Key` header, checked in constant time. On AWS the key is a `SecureString` in **Systems Manager Parameter Store**, injected into the API and dashboard tasks by **ECS**, and never stored in the image or in Git.
+- **Rate limiting.** Each client is limited to a configured number of requests per minute, returning HTTP 429 with `Retry-After`. The client is identified by the address the trusted proxies recorded, so a forged `X-Forwarded-For` header does not help. Cross-origin requests are refused unless origins are listed explicitly.
+- **Supply chain.** Every dependency is locked with hashes in `uv.lock`, every locked package is scanned with **pip-audit** on each build, and **Dependabot** proposes updates weekly. Saved models load only explicitly trusted types.
 - **One IAM role per service.** The **ECS** task, **CodeBuild**, **Firehose**, the CloudWatch-to-Firehose subscription, **SageMaker** and **EventBridge Scheduler** each run under their own role. Only the ECS execution role can read the API key.
-- **Least-privilege containers.** The API image runs as a non-root user, and every dependency is pinned in `requirements.lock`.
+- **Least-privilege containers.** The API image runs as a non-root user and installs only the runtime dependency group.
 - **Private by default.** Every S3 bucket blocks public access, and each container accepts traffic only from its own load balancer's security group.
 - **Image scanning.** Both **ECR** repositories scan every image for known vulnerabilities on push.
 - **No secrets in Git.** AWS access uses a dedicated **IAM** user through a local CLI profile. The **GitHub** token and the API key are read from git-ignored files into `sensitive` **Terraform** variables. Terraform state, variable files and plan files are git-ignored.
@@ -793,17 +836,17 @@ Real problems found while building, evaluating and deploying this system, and ho
 
 ## Cost
 
-While running, the stack costs about **$4.50 per day**: two load balancers, the API task (1 vCPU, 2 GB), the dashboard task (0.5 vCPU, 1 GB) and their public IP addresses. **SageMaker** is billed only for the minutes each monitoring job runs, and logs, S3, **Firehose**, Parameter Store and alarms cost a few cents. The whole stack is created and removed with **Terraform**, so `terraform destroy` stops all charges. That is how this deployment was shut down after verification.
+While running, the stack costs about **$4.50 per day**: two load balancers, the API task (1 vCPU, 2 GB), the web app task (0.5 vCPU, 1 GB) and their public IP addresses. **SageMaker** is billed only for the minutes each monitoring job runs, and logs, S3, **Firehose**, **CloudFront**, Parameter Store and alarms cost a few cents. The whole stack is created and removed with **Terraform**, so `terraform destroy` stops all charges. That is how this deployment was shut down after verification.
 
 ---
 
 ## What I would build next
 
 1. **Training on several months**, so the demand model sees enough weeks to beat the weekly pattern further ahead, and a direct multi-hour model trained on that history.
-2. **HTTPS** with AWS Certificate Manager on both load balancers.
+2. **A custom domain** with an AWS Certificate Manager certificate on CloudFront, and **AWS WAF** rate rules at the edge, so the limit holds across several API tasks.
 3. **Blue-green deployments** through CodeDeploy, with automatic rollback to the previous commit-tagged image.
 4. **Gated automatic retraining** on each new month of data: retrain, compare against the live model on the same evaluation, and promote only if it wins.
-5. **A shared rate limit** in a managed store, so the limit holds across several API tasks.
+5. **Rotating API keys** per client, with usage tracked per key.
 
 ---
 
@@ -814,9 +857,10 @@ While running, the stack costs about **$4.50 per day**: two load balancers, the 
 3. The 2-hour cut-over between the demand model and the weekly rule was chosen from the same backtest week that reports it, and the model's lead 2 hours ahead is not statistically clear.
 4. The fare models predict `fare_amount` only. Tips, tolls, surcharges and the total bill are not predicted.
 5. Forecasts start after the last stored hour of history, not from the current clock time.
-6. The AWS drift job checks the fields a client sends: 5 fare inputs, and the hour and day of week for demand. The demand training table holds every zone in every hour, so zone drift is checked for fares only. Derived features such as lags are checked by the offline drift drill.
-7. The rate limit is kept in memory per API task, so with several tasks each one enforces it separately.
-8. The API is served over HTTP on port 80 without TLS.
+6. The AWS drift job checks the fields a client sends: 5 fare inputs, and the hour and day of week for demand. The demand training table holds every zone in every hour, so zone drift is checked for fares only. Derived features such as lags are checked by the offline drift drill. Below about 300 requests per window, the zone check can still raise an occasional false alarm (3 in 40 trials).
+7. Live accuracy depends on the TLC's monthly files, which arrive about two months after each month ends, so the accuracy alarm reacts weeks after a problem starts.
+8. The rate limit is kept in memory per API task, so with several tasks each one enforces it separately.
+9. The API key is a single shared key without rotation.
 
 ---
 
@@ -830,11 +874,12 @@ While running, the stack costs about **$4.50 per day**: two load balancers, the 
 | `src/monitoring/` | Prediction capture, drift detection, live accuracy |
 | `src/responsible/` | Subgroup error analysis, explainability, model cards |
 | `scripts/` | Command entry points, including `golden_path.sh`, the evaluation and the AWS scripts |
-| `dashboard/` | Streamlit dashboard |
-| `docker/` | API, dashboard and monitoring Dockerfiles, Compose file |
+| `dashboard/` | Streamlit web app |
+| `docker/` | API, web app and monitoring Dockerfiles, Compose file |
 | `infra/terraform/` | All AWS infrastructure |
-| `.github/workflows/` | GitHub Actions quality gate |
+| `pyproject.toml`, `uv.lock` | Dependency groups (runtime, dev, dashboard, monitoring, aws) and the hash-checked lockfile |
+| `.github/` | GitHub Actions quality gate and weekly real-data check, Dependabot configuration |
 | `retraining/` | SageMaker pipeline definition for gated retraining |
-| `tests/` | 164 unit and integration tests on synthetic data and 5 checks on the real data |
+| `tests/` | 176 unit and integration tests on synthetic data and 5 checks on the real data |
 | `notebooks/` | Data exploration notebook |
 | `docs/` | Diagrams, API examples, data statement, model cards |

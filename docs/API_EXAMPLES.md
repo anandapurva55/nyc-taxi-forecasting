@@ -1,24 +1,27 @@
 # API Examples
 
 Set the base URL first. Locally it is the Uvicorn address. On AWS it is the
-Terraform `api_url` output.
+Terraform `api_url` output, an HTTPS address served by CloudFront. Plain HTTP is
+refused there, and the load balancer behind it accepts traffic only from
+CloudFront.
 
 ```bash
 API_URL=http://127.0.0.1:8000
 # AWS: API_URL=$(terraform -chdir=infra/terraform output -raw api_url)
 ```
 
-Swagger UI is at `$API_URL/docs`, the OpenAPI schema at `$API_URL/openapi.json`
-and Prometheus metrics at `$API_URL/metrics`.
+Swagger UI is at `$API_URL/docs` (use **Authorize** to enter the API key), the
+OpenAPI schema at `$API_URL/openapi.json` and Prometheus metrics at
+`$API_URL/metrics`.
 
 ## API key
 
 When the service runs with an `API_KEY` environment variable, every prediction,
-forecast and explanation request must send it in the `X-API-Key` header.
-Missing or wrong keys return HTTP 401. `/health`, `/version`, `/metrics` and
-`/docs` stay open for load balancer checks and monitoring. On AWS the key is
-stored in AWS Systems Manager Parameter Store as a `SecureString` and injected
-into the task by ECS.
+forecast, explanation, `/version` and `/metrics` request must send it in the
+`X-API-Key` header. Missing or wrong keys return HTTP 401. `/health` stays open
+for load balancer checks, and `/docs` shows only the request schema. On AWS the
+key is stored in AWS Systems Manager Parameter Store as a `SecureString` and
+injected into the task by ECS.
 
 ```bash
 KEY="X-API-Key: $API_KEY"
@@ -26,13 +29,16 @@ KEY="X-API-Key: $API_KEY"
 
 Locally without `API_KEY`, the header is ignored and can be left out. When
 `RATE_LIMIT_PER_MINUTE` is set, a client that sends more requests than that
-within one minute receives HTTP 429 with a `Retry-After` header.
+within one minute receives HTTP 429 with a `Retry-After` header. The client is
+identified by the address the outermost trusted proxy recorded
+(`TRUSTED_PROXY_HOPS`), so sending a made-up `X-Forwarded-For` header does not
+reset the budget.
 
 ## Readiness and version
 
 ```bash
 curl "$API_URL/health"
-curl "$API_URL/version"
+curl -H "$KEY" "$API_URL/version"
 ```
 
 The service is ready only when the body shows `"status": "ok"`, the model flags

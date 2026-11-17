@@ -23,12 +23,15 @@ phases:
     runtime-versions:
       python: 3.11
     commands:
-      - python -m pip install --upgrade pip
-      - pip install -r requirements.txt -c requirements.lock
+      # uv installs the exact, hash-checked versions in uv.lock into .venv.
+      - python -m pip install --quiet uv==0.12.1
+      - uv sync --frozen --python "$(command -v python)"
+      - export PATH="$CODEBUILD_SRC_DIR/.venv/bin:$PATH" MLFLOW_DISABLE_AGENT_HINT=1
 
   pre_build:
     commands:
       - echo "Ruff lint"
+      - export PATH="$CODEBUILD_SRC_DIR/.venv/bin:$PATH" MLFLOW_DISABLE_AGENT_HINT=1
       - ruff check .
       - echo "Pytest with coverage"
       - pytest --cov=src --cov-report=term-missing --cov-report=xml
@@ -54,6 +57,7 @@ phases:
           echo "Not the deploy branch - skipping image build/deploy."
           exit 0
         fi
+      - export PATH="$CODEBUILD_SRC_DIR/.venv/bin:$PATH" MLFLOW_DISABLE_AGENT_HINT=1
       - echo "Fetching baked artifacts from s3://$ARTIFACTS_BUCKET"
       - aws s3 sync "s3://$ARTIFACTS_BUCKET/mlruns" ./mlruns --only-show-errors
       - aws s3 cp "s3://$ARTIFACTS_BUCKET/mlflow.db" ./mlflow.db --only-show-errors

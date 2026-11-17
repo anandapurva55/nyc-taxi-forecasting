@@ -76,3 +76,26 @@ def start_run(
     mlflow.set_experiment(ensure_experiment(problem, config))
     with mlflow.start_run(run_name=run_name) as run:
         yield run
+
+
+# Library prefixes whose types may be stored in a saved model. MLflow 3 saves
+# sklearn-style models with skops, which refuses to load types it was not told to
+# trust; anything outside this list stops the save instead of being trusted.
+TRUSTED_MODEL_TYPE_PREFIXES = ("xgboost.", "lightgbm.", "sklearn.", "numpy.", "collections.OrderedDict")
+
+
+def log_sklearn_model(model, name: str = "model"):
+    """Log ``model`` in the secure skops format, trusting only known library types.
+
+    Returns MLflow's ``ModelInfo``; its ``model_uri`` is what gets registered.
+    """
+    import skops.io as sio
+
+    needed = sio.get_untrusted_types(data=sio.dumps(model))
+    unknown = [t for t in needed if not t.startswith(TRUSTED_MODEL_TYPE_PREFIXES)]
+    if unknown:
+        raise ValueError(f"Refusing to save a model containing untrusted types: {unknown}")
+    return mlflow.sklearn.log_model(
+        model, name=name, serialization_format="skops", skops_trusted_types=needed
+    )
+

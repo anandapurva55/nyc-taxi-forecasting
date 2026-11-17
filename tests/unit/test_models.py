@@ -229,14 +229,13 @@ def test_train_problem_selects_winner_logs_artifacts_and_registers(monkeypatch, 
         lambda path, artifact_path=None: logged_artifacts.append((path, artifact_path)),
     )
     monkeypatch.setattr(
-        train.mlflow,
-        "sklearn",
-        SimpleNamespace(log_model=lambda *args, **kwargs: None),
+        train, "log_sklearn_model", lambda model: SimpleNamespace(model_uri="models:/m-final")
     )
+    registered_uris = []
     monkeypatch.setattr(
         train.mlflow,
         "register_model",
-        lambda uri, name: SimpleNamespace(version="7", uri=uri, name=name),
+        lambda uri, name: registered_uris.append(uri) or SimpleNamespace(version="7", uri=uri, name=name),
     )
     monkeypatch.setattr(train, "configure_mlflow", lambda config: None)
     monkeypatch.setattr(
@@ -259,6 +258,8 @@ def test_train_problem_selects_winner_logs_artifacts_and_registers(monkeypatch, 
 
     assert result["best_estimator"] == "second"
     assert result["registered"] == {"name": "demand-model", "version": 7, "alias": "champion"}
+    # The final model is registered from the URI MLflow returned when logging it.
+    assert registered_uris == ["models:/m-final"]
     assert aliases == [("demand-model", "champion", "7")]
     assert result["results"][1]["run_id"] == "run-demand-second"
     assert result["selection"]["clear_winner"] is True

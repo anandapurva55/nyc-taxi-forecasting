@@ -33,7 +33,7 @@ import pandas as pd
 from src.config import Config, get_config
 from src.features.duration import DurationLookup
 from src.models import common, model_card, shap_utils, tuning, uncertainty
-from src.utils.mlflow_utils import configure_mlflow, start_run
+from src.utils.mlflow_utils import configure_mlflow, log_sklearn_model, start_run
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ def train_problem(
             mlflow.log_params(best_params)
             mlflow.log_metric("tune_rmse", tuned["best_value"])
             mlflow.log_metrics({f"val_{k}": v for k, v in val_metrics.items()})
-            mlflow.sklearn.log_model(model, artifact_path="model")
+            log_sklearn_model(model)
             run_id = run.info.run_id
 
         logger.info("[%s] %s: val_%s=%.4f", problem, estimator, metric, val_metrics[metric])
@@ -188,7 +188,7 @@ def train_problem(
         mlflow.log_metrics({f"val_{k}": v for k, v in best["val_metrics"].items()})
         mlflow.log_metrics({f"test_{k}": v for k, v in test_metrics.items()})
         mlflow.log_metrics({"test_rmse_ci_low": rmse_low, "test_rmse_ci_high": rmse_high})
-        mlflow.sklearn.log_model(final_model, artifact_path="model")
+        model_info = log_sklearn_model(final_model)
         mlflow.log_artifact(str(shap_out["summary"]), artifact_path="explainability")
         mlflow.log_artifact(str(shap_out["bar"]), artifact_path="explainability")
         mlflow.log_artifact(str(card_path), artifact_path="model_card")
@@ -206,7 +206,7 @@ def train_problem(
 
     registered = None
     if register:
-        result = mlflow.register_model(f"runs:/{final_run_id}/model", registry_name)
+        result = mlflow.register_model(model_info.model_uri, registry_name)
         mlflow.MlflowClient().set_registered_model_alias(registry_name, CHAMPION_ALIAS, result.version)
         registered = {"name": registry_name, "version": int(result.version), "alias": CHAMPION_ALIAS}
         logger.info(

@@ -9,14 +9,14 @@ Design notes
 ------------
 * The heavy ``sagemaker`` SDK is imported lazily inside :func:`build_pipeline`;
   importing this module does not require the SDK (so it stays lint/compile-safe
-  and the SDK only ships in ``requirements-monitoring.txt``).
+  and the SDK only ships in the ``aws`` dependency group).
 * Deployment uses the project's **immutable-image** model: rather than pushing a
   model artifact to an always-on endpoint, we rebuild the baked image and roll
   the Fargate service. The build+deploy work lives in
   :mod:`retraining.build_and_deploy`, invoked from the pipeline's final step
   (e.g. via a CodeBuild project or a processor running that script).
 
-Usage (requires AWS creds + ``requirements-monitoring.txt``)::
+Usage (requires AWS creds + ``uv sync --group aws``)::
 
     python -m retraining.pipeline --upsert --role-arn arn:aws:iam::...:role/... \
         --image-uri <ecr>/taxi-training:latest

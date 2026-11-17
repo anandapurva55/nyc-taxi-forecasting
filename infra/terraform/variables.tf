@@ -72,7 +72,7 @@ variable "retrain_schedule" {
 }
 
 variable "monitoring_image_uri" {
-  description = "ECR image URI (repo code + requirements-monitoring.txt) that the scheduled drift Processing job runs. Leave empty to skip creating the drift schedule."
+  description = "ECR image URI (repo code + monitoring dependency group) that the scheduled drift Processing job runs. Leave empty to skip creating the drift schedule."
   type        = string
   default     = ""
 }
@@ -95,10 +95,10 @@ variable "performance_schedule" {
   default     = "rate(7 days)"
 }
 
-variable "performance_actuals_key" {
-  description = "Key in the monitoring bucket of the realised hourly demand table the performance job compares predictions with."
+variable "performance_actuals" {
+  description = "Where the live accuracy job gets realised pickup counts: \"tlc\" builds them from the published NYC TLC monthly files that the captured predictions target; an s3:// URI points to a prepared hourly table instead."
   type        = string
-  default     = "actuals/demand_hourly.parquet"
+  default     = "tlc"
 }
 
 variable "drift_instance_type" {
@@ -209,3 +209,9 @@ variable "api_cors_allow_origins" {
   default     = []
 }
 
+
+variable "enable_https" {
+  description = "Serve the API and dashboard over HTTPS through CloudFront, and let the load balancers accept traffic only from CloudFront."
+  type        = bool
+  default     = true
+}

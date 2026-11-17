@@ -1,8 +1,10 @@
 """Rewrite MLflow artifact paths so a baked SQLite registry works inside a
 Linux container.
 
-The dev ``mlflow.db`` records **absolute host paths**, e.g.
-``file:///C:/taxi-forecasting/mlruns/1/<run>/artifacts/model``. Those cannot be
+The dev ``mlflow.db`` records **absolute host paths**: a ``file://`` URI such as
+``file:///C:/taxi-forecasting/mlruns/1/<run>/artifacts/model`` on Windows, or a
+plain path such as ``/Users/me/taxi-forecasting/mlruns/1/<run>/artifacts/model``
+on macOS and Linux. Those cannot be
 resolved when the database and ``mlruns/`` tree are copied into an image at
 ``/app``. This script produces a *container-ready* copy of the database with
 every artifact URI repointed at ``<new_base>`` (default ``file:///app/mlruns``).
@@ -30,11 +32,14 @@ _TARGETS = [
     ("runs", "artifact_uri"),
     ("model_versions", "source"),
     ("model_versions", "storage_location"),
+    # MLflow 3 keeps the files of each logged model under mlruns/<exp>/models/.
+    ("logged_models", "artifact_location"),
 ]
 
-# Matches everything up to and including the ``/mlruns`` segment of a file URI,
-# e.g. ``file:///C:/taxi-forecasting/mlruns`` or ``file:///app/mlruns``.
-_PREFIX_RE = re.compile(r"^file://.*?/mlruns", re.IGNORECASE)
+# Matches everything up to and including the ``/mlruns`` segment of a file URI
+# or a plain absolute path, e.g. ``file:///C:/taxi-forecasting/mlruns``,
+# ``/Users/me/taxi-forecasting/mlruns`` or ``file:///app/mlruns``.
+_PREFIX_RE = re.compile(r"^(?:file://)?(?:/|[A-Za-z]:[/\\]).*?[/\\]mlruns(?=[/\\]|$)", re.IGNORECASE)
 
 
 def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
@@ -49,7 +54,7 @@ def repoint(conn: sqlite3.Connection, new_base: str) -> int:
         if not _column_exists(conn, table, column):
             continue
         rows = conn.execute(
-            f"SELECT rowid, {column} FROM {table} WHERE {column} LIKE 'file:%mlruns%'"
+            f"SELECT rowid, {column} FROM {table} WHERE {column} LIKE '%mlruns%'"
         ).fetchall()
         for rowid, value in rows:
             new_value = _PREFIX_RE.sub(new_base, value)

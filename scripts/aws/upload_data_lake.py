@@ -10,7 +10,7 @@ out as a small data lake::
 
 The bucket is created by ``infra/terraform/datalake.tf`` (Terraform output
 ``datalake_bucket``). Requires AWS credentials and ``boto3`` (installed via
-``requirements-monitoring.txt`` in the job image, or locally for the demo).
+the ``aws`` dependency group in the job image, or locally for the demo).
 
 Usage::
 

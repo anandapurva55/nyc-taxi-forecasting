@@ -145,7 +145,7 @@ def demand_forecast() -> None:
         },
         title="Predicted pickups over the forecast horizon",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption(
         f"Request `{response['request_id']}` · model reference "
         f"`{response.get('model_reference', 'not reported')}`"
@@ -164,7 +164,7 @@ def demand_forecast() -> None:
         orientation="h",
         labels={"predicted_pickups": "Total predicted pickups", "label": "Zone"},
     )
-    st.plotly_chart(bar, use_container_width=True)
+    st.plotly_chart(bar, width="stretch")
 
 
 # --------------------------------------------------------------------------- #
@@ -260,7 +260,7 @@ def _render_contributions(explanation: dict, title: str) -> None:
         labels={"value": "SHAP contribution", "feature": "Feature"},
         title=title,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption(
         f"Base value {explanation['base_value']:.3f} + contributions ≈ "
         f"prediction {explanation['prediction']:.3f} (SHAP additivity)."
@@ -303,7 +303,7 @@ def responsible_ai() -> None:
             cols = [c for c in ("group", "n", "mean_actual", "wape", "rmse", "mae", "in_ratio") if c in sub.columns]
             st.dataframe(
                 sub.sort_values(sort_col, ascending=False)[cols],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
     else:
@@ -312,7 +312,7 @@ def responsible_ai() -> None:
     shap_png = data.shap_summary_path(problem)
     if shap_png:
         st.subheader("Global SHAP summary")
-        st.image(str(shap_png), use_column_width=True)
+        st.image(str(shap_png), width="stretch")
 
     card = data.model_card(problem)
     if card:
@@ -369,13 +369,13 @@ def monitoring() -> None:
         labels={"predicted_pickups": "Predicted pickups"},
         title="Predicted pickups by borough (next hour)",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     st.subheader("Top zones (next hour)")
     top = df.sort_values("predicted_pickups", ascending=False).head(15)
     st.dataframe(
         top[["zone", "Zone", "Borough", "predicted_pickups"]],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -444,13 +444,13 @@ def _render_drift_panel() -> None:
                 line_color="gray",
                 annotation_text=f"threshold {threshold}",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             with st.expander("Per-feature detail (PSI, KS or chi-square)", expanded=False):
                 cols = [c for c in ("feature", "kind", "psi", "test", "statistic", "pvalue",
                                     "ks_statistic", "ks_pvalue", "drifted") if c in fdf.columns]
                 st.dataframe(
                     fdf[cols],
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
         elif report.get("status") == "no_data":

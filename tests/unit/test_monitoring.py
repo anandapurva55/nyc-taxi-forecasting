@@ -209,3 +209,81 @@ def test_prediction_drift_flags_shifted_outputs():
     target = pd.Series(rng.normal(15, 5, 5000))
     assert not compute_prediction_drift(target, pd.Series(rng.normal(15, 5, 800))).drifted
     assert compute_prediction_drift(target, pd.Series(rng.normal(40, 5, 800))).drifted
+
+
+# --- Calendar features --------------------------------------------------------
+def _hourly_reference(days: int = 14) -> pd.DataFrame:
+    hours = pd.date_range("2024-02-05", periods=24 * days, freq="h")
+    return pd.DataFrame({"hour": hours.hour, "day_of_week": hours.dayofweek})
+
+
+def _traffic(start: str, end: str, hours_allowed=None, n: int = 600, seed: int = 0) -> pd.DataFrame:
+    span = pd.date_range(start, end, freq="h")
+    if hours_allowed is not None:
+        span = span[span.hour.isin(hours_allowed)]
+    picks = pd.DatetimeIndex(np.random.default_rng(seed).choice(span, n))
+    return pd.DataFrame({"hour": picks.hour, "day_of_week": picks.dayofweek})
+
+
+def _flags(report):
+    return {f.feature: f.drifted for f in report.features}
+
+
+def test_short_capture_window_is_not_calendar_drift():
+    from src.monitoring.drift import compute_drift
+
+    window = (pd.Timestamp("2024-02-27 19:00"), pd.Timestamp("2024-02-29 23:00"))
+    report = compute_drift(_hourly_reference(), _traffic(*window), window=window)
+    assert _flags(report) == {"hour": False, "day_of_week": False}
+    assert {f.kind for f in report.features} == {"calendar"}
+
+
+def test_traffic_piled_onto_some_hours_of_the_window_is_flagged():
+    from src.monitoring.drift import compute_drift
+
+    window = (pd.Timestamp("2024-02-27 00:00"), pd.Timestamp("2024-02-29 23:00"))
+    nights = _traffic(*window, hours_allowed=[0, 1, 2, 3, 22, 23])
+    assert _flags(compute_drift(_hourly_reference(), nights, window=window))["hour"] is True
+
+
+def test_reference_cells_are_weighted_equally():
+    from src.monitoring.drift import window_matched
+
+    ref = _hourly_reference(days=14)
+    window = (pd.Timestamp("2024-02-27 19:00"), pd.Timestamp("2024-02-29 23:00"))
+    matched = window_matched(ref, ref, ["hour", "day_of_week"], window)
+    # 5 hours on Tuesday plus two full days, one row per cell.
+    assert len(matched) == 5 + 24 + 24
+    assert matched["day_of_week"].value_counts().to_dict() == {1: 5, 2: 24, 3: 24}
+
+
+def test_capture_window_comes_from_target_hours():
+    from scripts.monitoring.run_drift_job import _capture_window
+
+    frame = pd.DataFrame({"target_hour": ["2024-02-28T05:00:00", "2024-02-27T19:00:00", None]})
+    assert _capture_window(frame) == (pd.Timestamp("2024-02-27 19:00"), pd.Timestamp("2024-02-28 05:00"))
+    assert _capture_window(pd.DataFrame({"zone": [1]})) is None
+
+
+def test_category_noise_in_a_small_window_is_not_drift():
+    from src.monitoring.drift import compute_drift
+
+    rng = np.random.default_rng(3)
+    zones = np.arange(100)
+    reference = pd.DataFrame({"PULocationID": rng.choice(zones, 50_000)})
+    report = compute_drift(reference, pd.DataFrame({"PULocationID": rng.choice(zones, 400)}))
+    feature = report.features[0]
+    # Sampling noise alone pushes category PSI near the threshold, but it is not significant.
+    assert feature.pvalue > 0.05 and not feature.drifted
+
+
+def test_real_category_shift_is_flagged():
+    from src.monitoring.drift import compute_drift
+
+    rng = np.random.default_rng(4)
+    zones = np.arange(100)
+    reference = pd.DataFrame({"PULocationID": rng.choice(zones, 50_000)})
+    current = rng.choice(zones, 400)
+    current[:120] = 7  # 30% of requests now come from one zone
+    assert compute_drift(reference, pd.DataFrame({"PULocationID": current})).features[0].drifted
+

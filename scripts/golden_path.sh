@@ -11,6 +11,10 @@
 #   bash scripts/golden_path.sh                 # February 2024, 5 tuning trials
 #   YEAR=2024 MONTH=2 TRIALS=5 bash scripts/golden_path.sh
 #   CLEAN=1 bash scripts/golden_path.sh         # delete generated outputs first
+#
+# Requirements: uv (https://docs.astral.sh/uv/), which also provides Python 3.11
+# when it is missing, network access to the NYC TLC file server, and on macOS
+# `brew install libomp` for XGBoost and LightGBM.
 
 set -euo pipefail
 
@@ -18,7 +22,6 @@ YEAR="${YEAR:-2024}"
 MONTH="${MONTH:-2}"
 TRIALS="${TRIALS:-5}"
 API_PORT="${API_PORT:-8000}"
-PYTHON_BIN="${PYTHON_BIN:-python3.11}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -26,6 +29,7 @@ cd "$ROOT"
 LOG_DIR="logs/golden_path"
 mkdir -p "$LOG_DIR"
 PY=".venv/bin/python"
+export MLFLOW_DISABLE_AGENT_HINT=1
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 STAGES=()
 API_PID=""
@@ -63,9 +67,9 @@ require_file() {
 }
 
 setup_env() {
-    [[ -x "$PY" ]] || "$PYTHON_BIN" -m venv .venv
-    "$PY" -m pip install --upgrade pip
-    "$PY" -m pip install -r requirements.txt -c requirements.lock
+    command -v uv >/dev/null || { echo "uv is required: https://docs.astral.sh/uv/getting-started/installation/"; return 1; }
+    # Exact, hash-checked versions from uv.lock, including the dev tooling.
+    uv sync --frozen --python 3.11
     "$PY" --version
 }
 

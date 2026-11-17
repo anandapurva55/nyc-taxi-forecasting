@@ -302,3 +302,14 @@ def test_forecast_points_report_their_method(client):
         "/explain/demand", json={"zone": zone, "target_hour": (last + pd.Timedelta(hours=5)).isoformat()}
     )
     assert explain_far.status_code == 400
+
+
+def test_api_key_also_protects_metrics_and_version_but_not_health(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "s3cret")
+    c, _ = client
+    assert c.get("/health").status_code == 200
+    for path in ("/metrics", "/version"):
+        assert c.get(path).status_code == 401
+        assert c.get(path, headers={"X-API-Key": "s3cret"}).status_code == 200
+    schemes = c.get("/openapi.json").json()["components"]["securitySchemes"]
+    assert schemes["APIKeyHeader"] == {"type": "apiKey", "in": "header", "name": "X-API-Key"}

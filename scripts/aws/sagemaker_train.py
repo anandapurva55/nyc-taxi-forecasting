@@ -1,7 +1,7 @@
 """CLI to submit model training as a SageMaker job.
 
 Runs the same ``scripts/train_models.py`` on managed cloud compute. Requires AWS
-credentials, ``requirements-monitoring.txt`` (sagemaker + boto3), a SageMaker
+credentials, the ``aws`` dependency group (sagemaker + boto3), a SageMaker
 execution role (Terraform output ``sagemaker_role_arn``), and a training image in
 ECR that bakes in this repo's code + deps.
 
