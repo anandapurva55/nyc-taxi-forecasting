@@ -1,4 +1,4 @@
-# NYC Taxi Demand and Fare Forecasting on AWS: End-to-End MLOps with XGBoost, LightGBM, MLflow, FastAPI, Streamlit, Amazon SageMaker, ECS Fargate, CloudFront and Terraform
+# NYC Taxi Demand and Fare Forecasting on AWS: End-to-End MLOps with XGBoost, LightGBM, MLflow, FastAPI, Streamlit, Docker, Amazon SageMaker, ECS Fargate, CloudFront and Terraform
 
 [![CI](https://github.com/anandapurva55/nyc-taxi-forecasting/actions/workflows/ci.yml/badge.svg)](https://github.com/anandapurva55/nyc-taxi-forecasting/actions/workflows/ci.yml)
 [![Interactive demo](docs/images/badges/interactive-demo.svg)](https://anandapurva55.github.io/nyc-taxi-forecasting/)
@@ -67,6 +67,7 @@ The live system on AWS, with the API, monitoring jobs and alarms, is described b
 20. [What I would build next](#what-i-would-build-next)
 21. [Limitations](#limitations)
 22. [Repository layout](#repository-layout)
+23. [License](#license)
 
 ---
 
@@ -856,6 +857,7 @@ Real problems found while building, evaluating and deploying this system, and ho
 - **The web app is a public front door.** It holds the API key on the server side and has no login of its own, so anyone with its address can use the fare, forecast and explanation features it offers. The key protects direct use of the API. For a showcase this is intended; a production deployment would add sign-in, for example with Amazon Cognito.
 - **Private by default.** Every S3 bucket blocks public access, and each container accepts traffic only from its own load balancer's security group.
 - **Image scanning.** Both **ECR** repositories scan every image for known vulnerabilities on push.
+- **Reporting a vulnerability.** See [SECURITY.md](SECURITY.md): reports go privately through GitHub's **Report a vulnerability** form.
 - **No secrets in Git.** AWS access uses a dedicated **IAM** user through a local CLI profile. The **GitHub** token and the API key are read from git-ignored files into `sensitive` **Terraform** variables. Terraform state, variable files and plan files are git-ignored.
 
 ---
@@ -910,3 +912,9 @@ While running, the stack costs about **$4.50 per day**: two load balancers, the 
 | `tests/` | 182 unit and integration tests on synthetic data and 5 checks on the real data |
 | `notebooks/` | Data exploration notebook |
 | `docs/` | Diagrams, API examples, data statement, model cards |
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE).
