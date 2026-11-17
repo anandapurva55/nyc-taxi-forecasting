@@ -18,11 +18,11 @@
 
 An end-to-end **MLOps** system on AWS, written in **Python**, that forecasts hourly taxi pickups across 254 New York City zones and quotes trip fares, built from 3 million NYC TLC trip records processed with **pandas**, **NumPy** and **PyArrow**.
 
-**XGBoost** and **LightGBM** regressors, built on **scikit-learn** and tuned with **Optuna**, forecast pickups per zone and price trips, with a separate booking-time model for quotes made before the trip. Each is benchmarked against simple baselines with bootstrap confidence intervals and versioned in the **MLflow** registry, which saves newly trained models in the safe **skops** format. A **FastAPI** service with **Pydantic** validation and **Prometheus** metrics runs on **Amazon ECS Fargate** behind an **Application Load Balancer** and serves the models over HTTPS through **Amazon CloudFront**, using the model for the next two hours of demand and last week's count after that. Its API key is kept in **AWS Systems Manager Parameter Store**, and each service runs under its own **AWS IAM** role. A **Streamlit** and **Plotly** web app lets people explore forecasts, fares and **SHAP** explanations. **GitHub Actions** and **AWS CodeBuild** test every change and push commit-tagged **Docker** images to **Amazon ECR**; dependencies are locked with **uv**, audited with **pip-audit** and kept current by **Dependabot**; and all 66 AWS resources are defined in **Terraform**. Every prediction flows through **CloudWatch Logs** and **Amazon Data Firehose** into **Amazon S3**, where **Amazon SageMaker Processing** jobs started by **Amazon EventBridge Scheduler** check for drift and score live demand accuracy against actual pickups, raising **CloudWatch** alarms through **Amazon SNS**. Fairness reports are published to a versioned S3 data lake catalogued for **AWS Glue** and **Amazon Athena**, and a **SageMaker Pipelines** definition sets out gated retraining.
+**XGBoost** and **LightGBM** regressors, built on **scikit-learn** and tuned with **Optuna**, forecast pickups per zone and price trips, with a separate booking-time model for quotes made before the trip. Each is benchmarked against simple baselines with bootstrap confidence intervals and versioned in the **MLflow** registry, which saves newly trained models in the safe **skops** format. A **FastAPI** service with **Pydantic** validation and **Prometheus** metrics runs on **Amazon ECS Fargate** behind an **Application Load Balancer** and serves the models over HTTPS through **Amazon CloudFront**, using the model for the next two hours of demand and last week's count after that. Its API key is kept in **AWS Systems Manager Parameter Store**, and each service runs under its own **AWS IAM** role. A **Streamlit** and **Plotly** web app lets people explore forecasts, fares and **SHAP** explanations. **GitHub Actions** and **AWS CodeBuild** test every change and push commit-tagged **Docker** images to **Amazon ECR**; dependencies are locked with **uv**, audited with **pip-audit** and kept current by **Dependabot**; and all 68 AWS resources are defined in **Terraform**. Every prediction flows through **CloudWatch Logs** and **Amazon Data Firehose** into **Amazon S3**, where **Amazon SageMaker Processing** jobs started by **Amazon EventBridge Scheduler** check for drift and score live demand accuracy against actual pickups, raising **CloudWatch** alarms through **Amazon SNS**. Fairness reports are published to a versioned S3 data lake catalogued for **AWS Glue** and **Amazon Athena**, and a **SageMaker Pipelines** definition sets out gated retraining.
 
 ![Web app demo](docs/images/dashboard_demo.gif)
 
-| **0.962** | **0.968** | **14 ms** | **373 ms** | **66** | **181** |
+| **0.962** | **0.968** | **14 ms** | **373 ms** | **68** | **187** |
 |:---:|:---:|:---:|:---:|:---:|:---:|
 | Fare model R² | Demand model R² | Median server latency | p95 end-to-end latency over HTTPS | AWS resources in Terraform | Automated tests |
 
@@ -85,9 +85,9 @@ Models are tuned on a holdout cut from the end of the training period, selected 
 | Data | 3,007,526 raw trips: 3,007,511 valid pickups feed demand, 2,722,931 clean trips (90.5%) feed fares |
 | Multi-hour demand | Over 57 forecast origins, the model wins 1 hour ahead (10.35 against 13.39); from 3 hours ahead the same hour last week is as good or better, so the API switches to it. The served forecast scores 13.81 against 14.77 for the model alone |
 | Backtests | Both models beat their baseline in all 3 rolling folds: demand 11.65 ± 3.14 against 13.35, fare $3.49 ± 0.11 against $4.80 |
-| Quality gate | Ruff clean, 181 tests passing, 92% line coverage, run by GitHub Actions and CodeBuild |
+| Quality gate | Ruff clean, 187 tests passing, 92% line coverage, run by GitHub Actions and CodeBuild |
 | Supply chain | 257 locked packages, hash-checked by uv, 0 known vulnerabilities (pip-audit blocks the build otherwise); Dependabot opens weekly update pull requests |
-| Infrastructure | 66 AWS resources from Terraform; API and web app ran 1 of 1 tasks behind CloudFront |
+| Infrastructure | 68 AWS resources from Terraform; API and web app ran 1 of 1 tasks behind CloudFront |
 | Checks on AWS | 10 of 10 smoke checks and 400 of 400 load-test requests passed over HTTPS; plain HTTP is refused and the load balancers cannot be reached directly; requests without the API key returned 401; a caller rotating a fake `X-Forwarded-For` on every request was still cut off at the rate limit |
 | Latency | 14 ms median server time; p95 373 ms (fare) and 349 ms (demand) end to end over HTTPS |
 | Live accuracy | 500 served demand predictions matched to actual pickups built automatically from the TLC file: RMSE 13.53 against the 11.36 test baseline, within the 20% tolerance |
@@ -433,7 +433,7 @@ Provisions the full AWS footprint with **Terraform** and the AWS provider 5.x. *
 | Terraform file | Resources |
 |---|---|
 | `main.tf` | ECR repository with a 20-image lifecycle rule, ECS cluster, Fargate task definition and service (1 vCPU, 2 GB), Application Load Balancer, security groups, log group, IAM roles, API key in Parameter Store |
-| `cdn.tf` | CloudFront distributions that serve the API and web app over HTTPS; the load balancers accept traffic only from CloudFront |
+| `cdn.tf` | CloudFront distributions that serve the API and web app over HTTPS, a secret origin header, and listener rules that accept only requests carrying it |
 | `cicd.tf` | CodeBuild project, GitHub credential and webhook, S3 bucket for build inputs, CodeBuild IAM role |
 | `monitoring.tf` | Firehose capture stream, S3 monitoring bucket, log subscription filter, SageMaker role, drift and live accuracy schedules, CloudWatch alarms and dashboard, SNS email topic |
 | `dashboard.tf` | Dashboard ECR repository, ECS service and load balancer |
@@ -841,17 +841,19 @@ Real problems found while building, evaluating and deploying this system, and ho
 | 18 | One test wrote a model into the project's real MLflow registry | MLflow 3 defaults to `sqlite:///mlflow.db` in the working directory | The test session now points MLflow at a temporary store | The registry file is byte-identical before and after the full test run |
 | 19 | Real traffic from a three-day window raised the drift alarm | Hour and day of week were compared as numbers against all of training | Compare them by category against the hours inside the capture window | `day_of_week` PSI fell from 8.17 to 0.005 on the same kind of traffic |
 | 20 | 500 random trips with no drift crossed the zone PSI threshold 6 times in 20 | Category PSI is inflated by small samples | Require a significant chi-square test as well, Bonferroni-corrected | 0 false alarms in 40 trials; a 10% shift is still caught |
+| 21 | The monitoring jobs failed with `PermissionError` once their image ran as a non-root user | SageMaker Processing mounts the output folder owned by root at run time, overriding the image's ownership | An entry point that gives the folder to the job's user, then drops root with `setpriv` | All three jobs completed on SageMaker as the non-root user |
 
 ---
 
 ## Security
 
-- **HTTPS only.** **CloudFront** serves the API and web app over TLS with its default certificate. Plain HTTP to the API is refused, the web app redirects to HTTPS, and the load balancers accept traffic only from CloudFront's origin-facing addresses, so the API key never crosses the internet unencrypted.
+- **HTTPS only.** **CloudFront** serves the API and web app over TLS with its default certificate. Plain HTTP to the API is refused, the web app redirects to HTTPS, and the load balancers accept traffic only from CloudFront's origin-facing addresses, so the API key never crosses the internet unencrypted. Because those addresses are shared by every CloudFront distribution, ours also send a secret `X-Origin-Verify` header generated by Terraform, and each load balancer listener answers 403 to any request without it.
 - **API key.** Every endpoint except `/health` and `/docs` requires an `X-API-Key` header, checked in constant time. On AWS the key is a `SecureString` in **Systems Manager Parameter Store**, injected into the API and dashboard tasks by **ECS**, and never stored in the image or in Git.
 - **Rate limiting.** Each client is limited to a configured number of requests per minute, returning HTTP 429 with `Retry-After`. The client is identified by the address the trusted proxies recorded, so a forged `X-Forwarded-For` header does not help. Cross-origin requests are refused unless origins are listed explicitly.
 - **Supply chain.** Every dependency is locked with hashes in `uv.lock`, every locked package is scanned with **pip-audit** on each build, and **Dependabot** proposes updates weekly. Saved models load only explicitly trusted types.
 - **One IAM role per service.** The **ECS** task, **CodeBuild**, **Firehose**, the CloudWatch-to-Firehose subscription, **SageMaker** and **EventBridge Scheduler** each run under their own role. Only the ECS execution role can read the API key.
-- **Least-privilege containers.** The API image runs as a non-root user and installs only the runtime dependency group.
+- **Least-privilege containers.** The API and web app images run as a non-root user. SageMaker mounts the monitoring jobs' output folder owned by root, so their entry point starts as root only to hand that folder to the same user, then drops root before the job runs. Each image installs only the dependency group it needs.
+- **The web app is a public front door.** It holds the API key on the server side and has no login of its own, so anyone with its address can use the fare, forecast and explanation features it offers. The key protects direct use of the API. For a showcase this is intended; a production deployment would add sign-in, for example with Amazon Cognito.
 - **Private by default.** Every S3 bucket blocks public access, and each container accepts traffic only from its own load balancer's security group.
 - **Image scanning.** Both **ECR** repositories scan every image for known vulnerabilities on push.
 - **No secrets in Git.** AWS access uses a dedicated **IAM** user through a local CLI profile. The **GitHub** token and the API key are read from git-ignored files into `sensitive` **Terraform** variables. Terraform state, variable files and plan files are git-ignored.
@@ -883,8 +885,8 @@ While running, the stack costs about **$4.50 per day**: two load balancers, the 
 5. Forecasts start after the last stored hour of history, not from the current clock time.
 6. The AWS drift job checks the fields a client sends: 5 fare inputs, and the hour and day of week for demand. The demand training table holds every zone in every hour, so zone drift is checked for fares only. Derived features such as lags are checked by the offline drift drill. Below about 300 requests per window, the zone check can still raise an occasional false alarm (3 in 40 trials).
 7. Live accuracy depends on the TLC's monthly files, which arrive about two months after each month ends, so the accuracy alarm reacts weeks after a problem starts.
-8. The rate limit is kept in memory per API task, so with several tasks each one enforces it separately.
-9. The API key is a single shared key without rotation.
+8. The rate limit is kept in memory per API task, so with several tasks each one enforces it separately. All web app visitors reach the API from the web app's address, so they share one rate-limit budget.
+9. The API key is a single shared key without rotation, and the web app has no sign-in of its own.
 
 ---
 
@@ -905,6 +907,6 @@ While running, the stack costs about **$4.50 per day**: two load balancers, the 
 | `pyproject.toml`, `uv.lock` | Dependency groups (runtime, dev, dashboard, monitoring, aws) and the hash-checked lockfile |
 | `.github/` | GitHub Actions quality gate and weekly real-data check, Dependabot configuration |
 | `retraining/` | SageMaker pipeline definition for gated retraining |
-| `tests/` | 176 unit and integration tests on synthetic data and 5 checks on the real data |
+| `tests/` | 182 unit and integration tests on synthetic data and 5 checks on the real data |
 | `notebooks/` | Data exploration notebook |
 | `docs/` | Diagrams, API examples, data statement, model cards |

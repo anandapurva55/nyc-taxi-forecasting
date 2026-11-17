@@ -6,7 +6,20 @@
 # The load balancers accept traffic only from CloudFront's origin-facing
 # addresses (see the security groups), so the plain-HTTP path is closed to the
 # public and the client IP that CloudFront appends to X-Forwarded-For can be
-# trusted (TRUSTED_PROXY_HOPS = 2 on the API).
+# trusted (TRUSTED_PROXY_HOPS = 2 on the API). Those addresses are shared by all
+# of CloudFront, so our distributions also send a secret header that the
+# listeners require: a distribution someone else points at the load balancer
+# gets 403.
+
+locals {
+  origin_verify_header = "X-Origin-Verify"
+}
+
+resource "random_password" "origin_verify" {
+  count   = var.enable_https ? 1 : 0
+  length  = 40
+  special = false
+}
 
 data "aws_cloudfront_cache_policy" "disabled" {
   name = "Managed-CachingDisabled"
@@ -30,6 +43,11 @@ resource "aws_cloudfront_distribution" "api" {
   origin {
     origin_id   = "api-alb"
     domain_name = aws_lb.api.dns_name
+
+    custom_header {
+      name  = local.origin_verify_header
+      value = random_password.origin_verify[0].result
+    }
 
     custom_origin_config {
       http_port              = 80
@@ -72,6 +90,11 @@ resource "aws_cloudfront_distribution" "dashboard" {
     origin_id   = "dashboard-alb"
     domain_name = aws_lb.dashboard[0].dns_name
 
+    custom_header {
+      name  = local.origin_verify_header
+      value = random_password.origin_verify[0].result
+    }
+
     custom_origin_config {
       http_port              = 80
       https_port             = 443
@@ -99,5 +122,42 @@ resource "aws_cloudfront_distribution" "dashboard" {
 
   viewer_certificate {
     cloudfront_default_certificate = true
+  }
+}
+
+# Forward only requests that carry the secret header our distributions add.
+resource "aws_lb_listener_rule" "api_from_cloudfront" {
+  count        = var.enable_https ? 1 : 0
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 1
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    http_header {
+      http_header_name = local.origin_verify_header
+      values           = [random_password.origin_verify[0].result]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "dashboard_from_cloudfront" {
+  count        = var.enable_https && var.enable_dashboard ? 1 : 0
+  listener_arn = aws_lb_listener.dashboard_http[0].arn
+  priority     = 1
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.dashboard[0].arn
+  }
+
+  condition {
+    http_header {
+      http_header_name = local.origin_verify_header
+      values           = [random_password.origin_verify[0].result]
+    }
   }
 }

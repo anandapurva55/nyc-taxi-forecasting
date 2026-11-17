@@ -6,6 +6,7 @@
 !src/**
 !config/**
 !scripts/**
+!docker/monitoring-entrypoint.sh
 !data/features/demand_train.parquet
 !data/features/fare_train.parquet
 **/__pycache__

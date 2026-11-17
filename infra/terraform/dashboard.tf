@@ -133,9 +133,20 @@ resource "aws_lb_listener" "dashboard_http" {
   port              = 80
   protocol          = "HTTP"
 
+  # With HTTPS on, requests reach the target only through the rule in cdn.tf,
+  # which checks CloudFront's secret origin header; anything else gets 403.
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.dashboard[0].arn
+    type             = var.enable_https ? "fixed-response" : "forward"
+    target_group_arn = var.enable_https ? null : aws_lb_target_group.dashboard[0].arn
+
+    dynamic "fixed_response" {
+      for_each = var.enable_https ? [1] : []
+      content {
+        content_type = "text/plain"
+        message_body = "Forbidden"
+        status_code  = "403"
+      }
+    }
   }
 }
 

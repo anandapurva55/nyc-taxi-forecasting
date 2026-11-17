@@ -440,7 +440,7 @@ resource "aws_scheduler_schedule" "drift" {
       RoleArn           = aws_iam_role.sagemaker[0].arn
       AppSpecification = {
         ImageUri            = var.monitoring_image_uri
-        ContainerEntrypoint = ["python3", "scripts/monitoring/run_drift_job.py"]
+        ContainerEntrypoint = ["monitoring-entrypoint", "python3", "scripts/monitoring/run_drift_job.py"]
         ContainerArguments = [
           "--problem", each.key,
           "--current-s3", "s3://${aws_s3_bucket.monitoring[0].bucket}/captured/",
@@ -499,7 +499,7 @@ resource "aws_scheduler_schedule" "performance" {
       RoleArn           = aws_iam_role.sagemaker[0].arn
       AppSpecification = {
         ImageUri            = var.monitoring_image_uri
-        ContainerEntrypoint = ["python3", "scripts/monitoring/run_performance_job.py"]
+        ContainerEntrypoint = ["monitoring-entrypoint", "python3", "scripts/monitoring/run_performance_job.py"]
         ContainerArguments = [
           "--current-s3", "s3://${aws_s3_bucket.monitoring[0].bucket}/captured/",
           "--actuals", var.performance_actuals,

@@ -52,4 +52,12 @@ COPY scripts ./scripts
 COPY data/features/demand_train.parquet ./data/features/demand_train.parquet
 COPY data/features/fare_train.parquet ./data/features/fare_train.parquet
 
-ENTRYPOINT ["python3", "scripts/monitoring/run_drift_job.py"]
+# The jobs run as an unprivileged user. SageMaker mounts its output folder owned
+# by root at run time, so the entry point starts as root only to hand that folder
+# to the user, then drops root before the job starts (docker/monitoring-entrypoint.sh).
+COPY docker/monitoring-entrypoint.sh /usr/local/bin/monitoring-entrypoint
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin app \
+    && chown -R app:app /app \
+    && chmod 0755 /usr/local/bin/monitoring-entrypoint
+
+ENTRYPOINT ["monitoring-entrypoint", "python3", "scripts/monitoring/run_drift_job.py"]
