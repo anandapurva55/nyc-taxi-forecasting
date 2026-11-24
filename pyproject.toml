@@ -12,18 +12,18 @@ dependencies = [
     "numpy==1.26.4",
     "pyarrow>=23.0.1,<24",
     "python-dateutil==2.9.0.post0",
-    "holidays==0.53",
+    "holidays==0.109",
     # Models (needed to load the registered estimators)
-    "scikit-learn==1.5.0",
+    "scikit-learn==1.5.2",
     "xgboost==2.0.3",
     "lightgbm>=4.6.0",
     # Model registry and explanations
     "mlflow>=3.17.2,<4",
     "protobuf>=5.29.6",
     "shap==0.45.1",
-    "matplotlib==3.9.0",
+    "matplotlib==3.11.2",
     # Config and utilities
-    "pyyaml==6.0.1",
+    "pyyaml==6.0.4",
     "python-dotenv>=1.2.2",
     "requests>=2.33.0",
     # Serving
@@ -36,9 +36,9 @@ dependencies = [
 [dependency-groups]
 # Training, notebooks, tests and security checks.
 dev = [
-    "optuna==3.6.1",
+    "optuna==3.6.2",
     "httpx>=0.27.0",
-    "ruff==0.5.5",
+    "ruff==0.17.6",
     "jupyterlab>=4.6.4",
     "nbformat>=5.10.4",
     "nbconvert>=7.17.1",
@@ -65,7 +65,7 @@ monitoring = [
 aws = [
     "boto3>=1.34",
     "sagemaker>=2.257.2,<3",
-    "evidently>=0.4,<0.5",
+    "evidently>=0.4,<0.8",
 ]
 
 [tool.uv]
